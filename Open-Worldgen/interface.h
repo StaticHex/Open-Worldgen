@@ -21,6 +21,7 @@
 #include "Camera.h"
 #include "debuggl.h"
 
+using glm::vec4;
 using glm::vec3;
 using glm::vec2;
 using glm::uvec3;
@@ -73,10 +74,11 @@ vec4 min_bounds = vec4(-(numeric_limits<float>::max)());
 vec4 max_bounds = vec4((numeric_limits<float>::max)());
 
 // Shader constants
-const vec4 lightPos = vec4(1.0f, 1.0f, 1.0f, 1.0f);
-const float ambient = 0.12f;
-const vec4 tSpecular = vec4(0.001f, 0.001f, 0.001f, 1.0f);
-const float tShininess = 1.0f;
+const vec4 lightPos = vec4(1.0f, 100.0f, 1.0f, 1.0f);
+const float ambConstant = 0.12f;
+const vec4 tAmbient = vec4(1.0f, 1.0f, 0.875f, 1.0f);
+const vec4 tSpecular = vec4(0.2f, 0.2f, 0.2f, 1.0f);
+const float tShininess = 0.1f;
 
 // VBO and VAO descriptors
 enum { kVertexBuffer, kNormalBuffer, kTempBuffer, kIndexBuffer, kNumVbos };

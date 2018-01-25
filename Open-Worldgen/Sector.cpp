@@ -1,18 +1,19 @@
 #include "Sector.h"
 
-Sector::Sector() : 
-	temp(75.0), 
-	texture(0), 
+Sector::Sector() :
+	temp(75.0),
+	texture(0),
 	position(vec3(0.0, 0.0, 0.0)) {
 }
 
-Sector::Sector(float x, float y, float z) : 
-	temp(75.0), 
-	texture(0), 
+Sector::Sector(float x, float y, float z) :
+	temp(75.0),
+	texture(0),
 	position(vec3(x, y, z)) {
 }
 
-void Sector::drawSector(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs, vector<float> &temps) {
+void Sector::drawSector(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs, 
+	vector<float> &temps, vector<uvec3> &faces, int index) {
 	// Local position vectors, used to build the cube with fewer operations
 	vec3 relPP = vec3(size + position.x, size + position.y, size + position.z);
 	vec3 relPN = vec3(-size + position.x, -size + position.y, -size + position.z);
@@ -26,7 +27,7 @@ void Sector::drawSector(vector<vec4> &vertices, vector<vec4> &normals, vector<ve
 	vertices.push_back(vec4(relPN.x, relPP.y, relPN.z, 1.0f));
 
 	// Face 2 (Wall opposite wall 1)
-	vertices.push_back(vec4(relPN.x, relPN.y, relPN.z, 1.0f));
+	vertices.push_back(vec4(relPN.x, relPN.y, relPP.z, 1.0f));
 	vertices.push_back(vec4(relPP.x, relPN.y, relPP.z, 1.0f));
 	vertices.push_back(vec4(relPN.x, relPP.y, relPP.z, 1.0f));
 	vertices.push_back(vec4(relPP.x, relPN.y, relPP.z, 1.0f));
@@ -75,5 +76,11 @@ void Sector::drawSector(vector<vec4> &vertices, vector<vec4> &normals, vector<ve
 	// Temperatures
 	for (int i = 0; i < 36; i++) {
 		temps.push_back(this->temp);
+	}
+
+	int start = index * 36;
+	int end = start + 36;
+	for (int i = start; i < end; i += 3) {
+		faces.push_back(uvec3(i, i + 1, i + 2));
 	}
 }

@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 using glm::vec4;
 using glm::vec3;
+using glm::uvec3;
 using glm::vec2;
 using std::vector;
 using std::cout;
@@ -13,12 +14,13 @@ class Sector {
 public:
 	float temp;
 	int texture;
+	const float size = 0.25f;
 	vec3 position;
 
 	Sector();
 	Sector(float x, float y, float z);
-	void drawSector(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs, vector<float> &temps);
+	void drawSector(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
+		vector<float> &temps, vector<uvec3> &faces, int index);
 private:
-	const float size = 1.0;
 	const vec4 relN[3] = { vec4(0.0f, 0.0f, 1.0f, 0.0f), vec4(0.0f, 1.0f, 0.0f, 0.0f), vec4(1.0f, 0.0f, 0.0f, 0.0f) };
 };
