@@ -107,22 +107,23 @@ int main(int argc, char* argv[])
 	std::cout << "OpenGL version supported:" << version << "\n";
 
 	// Init map data
-	vector<Sector> chunk;
-	float baseTemp = 0;
-	float adjustTemp = 0;
-	float mod = Sector().size * 2;
-	for (int i = -8; i < 8; i++) {
-		adjustTemp = baseTemp;
-		for (int j = -8; j < 8; j++) {
-			chunk.push_back(Sector(j*mod, 0.0f, i*mod));
-			chunk.back().temp = adjustTemp;
-			chunk.back().drawSector(tVertices, tNormals, tUv, tTemps, tFaces, (i+8)*16 + (j+8));
-			adjustTemp += 5;
+	Occulus single = Occulus();
+	// set temperature
+
+	for (int i = 0; i < 9; i++) {
+		for (int j = 0; j < 9; j++) {
+			for (int k = 0; k < 16; k++) {
+				for (int l = 0; l < 16; l++) {
+					if ((i + j + k + l) % 2 == 0)
+						single.map[i * 9 + j].map[k * 16 + l].temp = 50;
+					else
+						single.map[i * 9 + j].map[k * 16 + l].temp = 75;
+				}
+			}
 		}
-		baseTemp += 5;
 	}
-	//Sector testSector = Sector();
-	//testSector.drawSector(tVertices, tNormals, tUv, tTemps, tFaces, 0);
+	
+	single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
 	
 	// Setup our VAO array.
 	CHECK_GL_ERROR(glGenVertexArrays(kNumVaos, &gArrayObjects[0]));
@@ -238,18 +239,8 @@ int main(int argc, char* argv[])
 	tNormals.clear();
 	tFaces.clear();
 	tTemps.clear();
-	baseTemp = 0;
-	adjustTemp = 0;
-	for (int i = 0; i < 16; i++) {
-		adjustTemp = baseTemp;
-		for (int j = 0; j < 16; j++) {
-			chunk.push_back(Sector(j*mod, 0.0f, i*mod));
-			chunk.back().temp = adjustTemp;
-			chunk.back().drawSector(tVertices, tNormals, tUv, tTemps, tFaces, i * 15 + j);
-			adjustTemp += 5;
-		}
-		baseTemp += 5;
-	}
+	single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
+
 	//testSector.drawSector(tVertices, tNormals, tUv, tTemps, tFaces, 0);
 	
 	while (!glfwWindowShouldClose(window)) {

@@ -19,8 +19,9 @@ public:
 
 	Sector();
 	Sector(float x, float y, float z);
-	void drawSector(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
-		vector<float> &temps, vector<uvec3> &faces, int index);
+	Sector(vec3 pos);
+	int draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
+		vector<float> &temps, vector<uvec3> &faces, int fNum, int draw);
 private:
-	const vec4 relN[3] = { vec4(0.0f, 0.0f, 1.0f, 0.0f), vec4(0.0f, 1.0f, 0.0f, 0.0f), vec4(1.0f, 0.0f, 0.0f, 0.0f) };
+	const vec4 relN[3] = { vec4(0.0f, 0.0f, 1.0f, 0.0f), vec4(1.0f, 0.0f, 0.0f, 0.0f), vec4(0.0f, 1.0f, 0.0f, 0.0f) };
 };
