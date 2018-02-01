@@ -109,19 +109,6 @@ int main(int argc, char* argv[])
 	// Init map data
 	Occulus single = Occulus();
 	// set temperature
-
-	for (int i = 0; i < 9; i++) {
-		for (int j = 0; j < 9; j++) {
-			for (int k = 0; k < 16; k++) {
-				for (int l = 0; l < 16; l++) {
-					if ((i + j + k + l) % 2 == 0)
-						single.map[i * 9 + j].map[k * 16 + l].temp = 50;
-					else
-						single.map[i * 9 + j].map[k * 16 + l].temp = 75;
-				}
-			}
-		}
-	}
 	
 	single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
 	
@@ -235,15 +222,18 @@ int main(int argc, char* argv[])
 		glGetUniformLocation(tProgram, "shininess"));
 
 	// run geometry here so old buffers are bound
+	/*
 	tVertices.clear();
 	tNormals.clear();
 	tFaces.clear();
 	tTemps.clear();
 	single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
+	*/
 
-	//testSector.drawSector(tVertices, tNormals, tUv, tTemps, tFaces, 0);
-	
+
+	int count = 1;
 	while (!glfwWindowShouldClose(window)) {
+
 		// Setup some basic window stuff.
 		glfwGetFramebufferSize(window, &winWidth, &winHeight);
 		glViewport(0, 0, winWidth, winHeight);
@@ -256,6 +246,29 @@ int main(int argc, char* argv[])
 		
 		// Switch to the Geometry VAO.
 		CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kGeometryVao]));
+
+		tVertices.clear();
+		tNormals.clear();
+		tFaces.clear();
+		tTemps.clear();
+		single.update(camera.getCenter());
+		
+		for (int i = 0; i < O_DIM; i++) {
+			for (int j = 0; j < O_DIM; j++) {
+				for (int k = 0; k < 16; k++) {
+					for (int l = 0; l < 16; l++) {
+						if ((i + j + k + l) % 2 == 0)
+							single.map[i * O_DIM + j].map[k * 16 + l].temp = 50;
+						else
+							single.map[i * O_DIM + j].map[k * 16 + l].temp = 75;
+					}
+				}
+			}
+		}
+		
+		
+		//single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
+		single.drawTrimesh(tVertices, tNormals, tTemps, tFaces);
 
 		// Compute the projection matrix.
 		aspect = static_cast<float>(winWidth) / winHeight;

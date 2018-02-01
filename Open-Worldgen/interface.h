@@ -36,6 +36,10 @@ using std::numeric_limits;
 #define PRESS_A key == GLFW_KEY_A && action != GLFW_RELEASE
 #define PRESS_S key == GLFW_KEY_S && action != GLFW_RELEASE
 #define PRESS_D key == GLFW_KEY_D && action != GLFW_RELEASE
+#define PRESS_LSHIFT key == GLFW_KEY_LEFT_SHIFT && action != GLFW_RELEASE
+#define PRESS_RSHIFT key == GLFW_KEY_RIGHT_SHIFT && action != GLFW_RELEASE
+#define PRESS_RCTRL key == GLFW_KEY_RIGHT_CONTROL && action != GLFW_RELEASE
+#define PRESS_SPACE key == GLFW_KEY_SPACE && action != GLFW_RELEASE
 #define PRESS_LEFT key == GLFW_KEY_LEFT && action != GLFW_RELEASE
 #define PRESS_RIGHT key == GLFW_KEY_RIGHT && action != GLFW_RELEASE
 #define PRESS_UP key == GLFW_KEY_UP && action != GLFW_RELEASE
@@ -102,85 +106,60 @@ void KeyCallback(GLFWwindow* window,
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GL_TRUE);
 	else if (PRESS_W) {
-		if (isGlobal) {
-			camera.setEye(camera.getEye() +
-				camera.zoomSpeed*camera.getLook());
-		}
-		else {
 			camera.setEye(camera.getEye() +
 				camera.zoomSpeed*camera.getLook());
 			camera.setCenter(camera.getCenter() +
 				camera.zoomSpeed*camera.getLook());
-		}
 	}
 	else if (PRESS_S) {
-		if (isGlobal) {
-			camera.setEye(camera.getEye() -
-				camera.zoomSpeed*camera.getLook());
-		}
-		else {
 			camera.setEye(camera.getEye() -
 				camera.zoomSpeed*camera.getLook());
 			camera.setCenter(camera.getCenter() -
 				camera.zoomSpeed*camera.getLook());
-		}
 	}
 	else if (PRESS_A) {
-		if (isGlobal) {
-			camera.setEye(camera.getEye() +
+			camera.setEye(camera.getEye() -
 				camera.panSpeed*camera.getRight());
-		}
-		else {
-			camera.setEye(camera.getEye() +
+			camera.setCenter(camera.getCenter() -
 				camera.panSpeed*camera.getRight());
-			camera.setCenter(camera.getCenter() +
-				camera.panSpeed*camera.getRight());
-		}
 	}
 	else if (PRESS_D) {
-		if (isGlobal) {
-			camera.setEye(camera.getEye() -
+			camera.setEye(camera.getEye() +
 				camera.panSpeed*camera.getRight());
-		}
-		else {
-			camera.setEye(camera.getEye() -
+			camera.setCenter(camera.getCenter() +
 				camera.panSpeed*camera.getRight());
-			camera.setCenter(camera.getCenter() -
-				camera.panSpeed*camera.getRight());
-		}
+	}
+	else if (PRESS_SPACE) {
+		camera.setEye(camera.getEye() +
+			camera.panSpeed*camera.getUp());
+		camera.setCenter(camera.getCenter() +
+			camera.panSpeed*camera.getUp());
+	}
+	else if (PRESS_LSHIFT) {
+		camera.setEye(camera.getEye() - 
+			camera.panSpeed*camera.getUp());
+		camera.setCenter(camera.getCenter() -
+			camera.panSpeed*camera.getUp());
 	}
 	else if (PRESS_UP) {
-		if (isGlobal) {
-			camera.setEye(camera.getEye() -
-				camera.panSpeed*camera.getUp());
-		}
-		else {
-			camera.setEye(camera.getEye() -
-				camera.panSpeed*camera.getUp());
-			camera.setCenter(camera.getCenter() -
-				camera.panSpeed*camera.getUp());
-		}
+		camera.rotateEye(-camera.getRight(), -0.2*camera.rollSpeed);
 	}
 	else if (PRESS_DOWN) {
-		if (isGlobal) {
-			camera.setEye(camera.getEye() +
-				camera.panSpeed*camera.getUp());
-		}
-		else {
-			camera.setEye(camera.getEye() +
-				camera.panSpeed*camera.getUp());
-			camera.setCenter(camera.getCenter() +
-				camera.panSpeed*camera.getUp());
-		}
+		camera.rotateEye(-camera.getRight(), 0.2*camera.rollSpeed);
 	}
 	else if (PRESS_LEFT) {
-		camera.rotateEye(-camera.getLook(), camera.rollSpeed);
+		camera.rotateEye(-camera.getUp(), camera.rollSpeed);
 	}
 	else if (PRESS_RIGHT) {
-		camera.rotateEye(-camera.getLook(), -camera.rollSpeed);
+		camera.rotateEye(-camera.getUp(), -camera.rollSpeed);
 	}
-	else if (key == GLFW_KEY_C && action != GLFW_RELEASE) {
-		isGlobal = !isGlobal;
+	else if (PRESS_RSHIFT) {
+		camera.setEye(camera.getEye() +
+			camera.zoomSpeed*camera.getLook());
+	}
+	else if (PRESS_RCTRL) {
+		camera.setEye(camera.getEye() -
+			camera.zoomSpeed*camera.getLook());
 	}
 }
 
@@ -193,32 +172,12 @@ void MousePosCallback(GLFWwindow* window, double mouse_x, double mouse_y)
 	if (!mousePressed)
 		return;
 	if (currentButton == GLFW_MOUSE_BUTTON_LEFT) {
-		if (isGlobal) {
-			camera.rotateEye(camera.getUp(), camera.rotationSpeed * (dV.x / dVl)*.3);
-			camera.rotateEye(camera.getRight(), camera.rotationSpeed * (dV.y / dVl)*.3);
-		}
-		else {
-			camera.setEye(camera.getEye() +
-				0.2f*(dV.x / dVl)*camera.panSpeed*camera.getRight());
-			camera.setCenter(camera.getCenter() +
-				0.2f*(dV.x / dVl)*camera.panSpeed*camera.getRight());
-			camera.setEye(camera.getEye() +
-				-0.2f*(dV.y / dVl)*camera.panSpeed*camera.getUp());
-			camera.setCenter(camera.getCenter() +
-				-0.2f*(dV.y / dVl)*camera.panSpeed*camera.getUp());
-		}
+		camera.rotateEye(camera.getUp(), camera.rotationSpeed * (dV.x / dVl)*.3);
+		camera.rotateEye(camera.getRight(), camera.rotationSpeed * (dV.y / dVl)*.3);
 	}
 	else if (currentButton == GLFW_MOUSE_BUTTON_RIGHT) {
-		if (isGlobal) {
-			camera.setEye(camera.getEye() -
-				-0.1f*dV.y*camera.zoomSpeed*camera.getLook());
-		}
-		else {
-			camera.setEye(camera.getEye() -
-				-0.1f*dV.y*camera.zoomSpeed*camera.getLook());
-			camera.setCenter(camera.getCenter() -
-				-0.1f*dV.y*camera.zoomSpeed*camera.getLook());
-		}
+		camera.setEye(camera.getEye() -
+			-0.1f*dV.y*camera.zoomSpeed*camera.getLook());
 	}
 	else if (PRESS_MIDDLE_BUTTON) {
 		//std::cout << std::to_string(camera.getLook().z) << "\n";
