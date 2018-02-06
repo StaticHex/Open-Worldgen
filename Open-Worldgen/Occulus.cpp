@@ -8,7 +8,7 @@ Occulus::Occulus() :
 	size = spacing * O_DIM * C_DIM;
 	xCount = O_DIM - 1;
 	zCount = O_DIM - 1;
-	initMap(0.0f, 0.0f, 0.0f);
+	initMap();
 }
 
 Occulus::Occulus(float x, float y, float z) :
@@ -18,7 +18,7 @@ Occulus::Occulus(float x, float y, float z) :
 	size = spacing * O_DIM * C_DIM;
 	xCount = O_DIM - 1;
 	zCount = O_DIM - 1;
-	initMap(x, y, z);
+	initMap();
 }
 
 Occulus::Occulus(vec3 pos) :
@@ -28,33 +28,25 @@ Occulus::Occulus(vec3 pos) :
 	size = spacing * O_DIM;
 	xCount = O_DIM - 1;
 	zCount = O_DIM - 1;
-	initMap(pos.x, pos.y, pos.z);
+	initMap();
 }
 
-void Occulus::initMap(int x, int y, int z) {
-	if (!map.size()) {
-		for (int i = O_MIN; i < O_MAX; i++) {
-			for (int j = O_MIN; j < O_MAX; j++) {
-				this->map.push_back(Sector(x + j*spacing, 0.0f, z + i*spacing));
-			}
-		}
-	}
-	else {
-		for (int i = O_MIN; i < O_MAX; i++) {
-			for (int j = O_MIN; j < O_MAX; j++) {
-				this->map[(i+O_MAX)*O_DIM + (j+O_MAX)].position = vec3(x + j*spacing, 0.0f, z + i*spacing);
-			}
+void Occulus::initMap() {
+	for (int i = O_MIN; i < O_MAX; i++) {
+		for (int j = O_MIN; j < O_MAX; j++) {
+			this->map.push_back(Sector(j*spacing, 0.0f, i*spacing));
 		}
 	}
 }
 
 void Occulus::update(vec3 pos, vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
 	vector<float> &temps) {
-	initMap(pos.x, pos.y, pos.z);
-	// set temperature
+	position.x = pos.x;
+	position.z = pos.z;
 	for (int i = 0; i < O_DIM; i++) {
 		for (int j = 0; j < O_DIM; j++) {
-			if ((i + j) % 2 == 0)
+			vec3 v = position + map[i * O_DIM + j].position;
+			if ((int(v.x + v.z)) % 2 == 0)
 				map[i * O_DIM + j].temp = 50;
 			else
 				map[i * O_DIM + j].temp = 75;
@@ -112,10 +104,10 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 	int limit = O_DIM - 1;
 	for (int i = 0; i < limit; i++) {
 		for (int j = 0; j < limit; j++) {
-			vec4 p1 = vec4(map[i*O_DIM + j].position, 1.0);
-			vec4 p2 = vec4(map[i*O_DIM + (j + 1)].position, 1.0);
-			vec4 p3 = vec4(map[(i + 1)*O_DIM + j].position, 1.0);
-			vec4 p4 = vec4(map[(i + 1)*O_DIM + (j + 1)].position, 1.0);
+			vec4 p1 = vec4(this->position + map[i*O_DIM + j].position, 1.0);
+			vec4 p2 = vec4(this->position + map[i*O_DIM + (j + 1)].position, 1.0);
+			vec4 p3 = vec4(this->position + map[(i + 1)*O_DIM + j].position, 1.0);
+			vec4 p4 = vec4(this->position + map[(i + 1)*O_DIM + (j + 1)].position, 1.0);
 			float t1 = map[i*O_DIM + j].temp;
 			float t2 = map[i*O_DIM + (j + 1)].temp;
 			float t3 = map[(i + 1)*O_DIM + j].temp;
