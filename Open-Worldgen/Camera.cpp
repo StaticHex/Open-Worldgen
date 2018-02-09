@@ -10,7 +10,9 @@ Camera::Camera() :
 	up(vec3(0.0f, 1.0, 0.0f)), 
 	center(vec3(0.0f, 0.0f, 0.0f)), 
 	right(vec3(1.0, 0.0f, 0.0f)),
-	eye(vec3(0.0f, 0.0f, cameraDistance)){}
+	eye(vec3(0.0f, 0.0f, cameraDistance)){
+	orientation = mat3(right, up, look);
+}
 
 Camera::Camera(float dist) : 
 	cameraDistance(dist), 
@@ -18,7 +20,9 @@ Camera::Camera(float dist) :
 	up(vec3(0.0f, 1.0, 0.0f)), 
 	center(vec3(0.0f, 0.0f, 0.0f)), 
 	right(vec3(1.0, 0.0f, 0.0f)),
-	eye(vec3(0.0f, 0.0f, cameraDistance)) {}
+	eye(vec3(0.0f, 0.0f, cameraDistance)) {
+	orientation = mat3(right, up, look);
+}
 
 mat4 Camera::getViewMatrix() const
 {
@@ -59,16 +63,10 @@ void Camera::setCenter(vec3 nCenter) {
 }
 
 void Camera::rotateEye(vec3 axis_of_rotation, float angle) {
-
-	mat4x4 V = { right.x, up.x, look.x, eye.x,
-		right.y, up.y, look.y, eye.y,
-		right.z, up.z, look.z, eye.z,
-		0.0f       , 0.0f    , 0.0f      , 1.0f };
-
-	V = glm::rotate(V, angle, axis_of_rotation);
-	right = vec3(V[0][0], V[1][0], V[2][0]);
-	up = vec3(V[0][1], V[1][1], V[2][1]);
-	look = vec3(V[0][2], V[1][2], V[2][2]);
-	eye = vec3(V[0][3], V[1][3], V[2][3]);
+	orientation = mat3(rotate(-angle, axis_of_rotation) * mat4(orientation));
+	right = column(orientation, 0);
+	look = column(orientation, 1);
+	look = column(orientation, 2);
+	center = eye + cameraDistance * look;
 	cameraDistance = distance(eye, center);
 }

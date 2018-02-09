@@ -1,7 +1,11 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_access.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/transform.hpp>
 using glm::mat4;
+using glm::mat3;
 using glm::vec3;
 using glm::distance;
 using glm::normalize;
@@ -9,6 +13,8 @@ using glm::cross;
 using glm::dot;
 using glm::transpose;
 using glm::mat4x4;
+using glm::column;
+using glm::rotate;
 
 class Camera {
 public:
@@ -20,6 +26,7 @@ public:
 	Camera();
 	Camera(float dist);
 	mat4 getViewMatrix() const;
+	mat3 orientation;
 	void rotateEye(vec3 axis_of_rotation, float angle);
 	void setEye(vec3 nEye);
 	void setLook(vec3 nLook);

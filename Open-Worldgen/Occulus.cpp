@@ -6,8 +6,7 @@ Occulus::Occulus() :
 {
 	position = vec3(0.0f, 0.0f, 0.0f);
 	size = spacing * O_DIM * C_DIM;
-	xCount = O_DIM - 1;
-	zCount = O_DIM - 1;
+	open_simplex_noise(77374, &ctx);
 	initMap();
 }
 
@@ -16,8 +15,7 @@ Occulus::Occulus(float x, float y, float z) :
 {
 	position = vec3(x, y, z);
 	size = spacing * O_DIM * C_DIM;
-	xCount = O_DIM - 1;
-	zCount = O_DIM - 1;
+	open_simplex_noise(77374, &ctx);
 	initMap();
 }
 
@@ -26,15 +24,38 @@ Occulus::Occulus(vec3 pos) :
 	spacing(Sector().size * 2.0)
 {
 	size = spacing * O_DIM;
-	xCount = O_DIM - 1;
-	zCount = O_DIM - 1;
+	open_simplex_noise(77374, &ctx);
 	initMap();
+}
+
+void Occulus::mapNoise(int index) {
+	vec3 tVec = position + map[index].position;
+	double nx = tVec.x / (O_DIM * 1.0) - 0.5;
+	double nz = tVec.z / (O_DIM * 1.0) - 0.5;
+	double tVal = open_simplex_noise2(ctx, nx, nz);
+	double hVal = 1.0 * open_simplex_noise2(ctx, nx * 1.0, nz * 1.0);
+		   hVal+= 0.5 * open_simplex_noise2(ctx, nx * 10.0, nz * 10.0);
+		   hVal += 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 50.0);
+		   hVal = powf(hVal, 4.0);
+	map[index].temp = tVal * 100.0;
+	map[index].position.y = (hVal) * 20.0;
 }
 
 void Occulus::initMap() {
 	for (int i = O_MIN; i < O_MAX; i++) {
 		for (int j = O_MIN; j < O_MAX; j++) {
 			this->map.push_back(Sector(j*spacing, 0.0f, i*spacing));
+			mapNoise(map.size() - 1);
+		}
+	}
+}
+
+void Occulus::updateMap() {
+	if (map.size()) {
+		for (int i = 0; i < O_DIM; i++) {
+			for (int j = 0; j < O_DIM; j++) {
+				mapNoise(i*O_DIM + j);
+			}
 		}
 	}
 }
@@ -43,15 +64,18 @@ void Occulus::update(vec3 pos, vector<vec4> &vertices, vector<vec4> &normals, ve
 	vector<float> &temps) {
 	position.x = pos.x;
 	position.z = pos.z;
+	/*
 	for (int i = 0; i < O_DIM; i++) {
 		for (int j = 0; j < O_DIM; j++) {
 			vec3 v = position + map[i * O_DIM + j].position;
-			if ((int(v.x + v.z)) % 2 == 0)
+			if ((int(10*(v.x + v.z))) % 2 == 0)
 				map[i * O_DIM + j].temp = 50;
 			else
 				map[i * O_DIM + j].temp = 75;
 		}
 	}
+	*/
+	updateMap();
 	draw(vertices, normals, uvs, temps);
 }
 

@@ -148,18 +148,10 @@ void KeyCallback(GLFWwindow* window,
 		camera.rotateEye(-camera.getRight(), 0.2*camera.rollSpeed);
 	}
 	else if (PRESS_LEFT) {
-		camera.rotateEye(-camera.getUp(), camera.rollSpeed);
+		camera.rotateEye(-camera.getUp(), 0.5*camera.rollSpeed);
 	}
 	else if (PRESS_RIGHT) {
-		camera.rotateEye(-camera.getUp(), -camera.rollSpeed);
-	}
-	else if (PRESS_RSHIFT) {
-		camera.setEye(camera.getEye() +
-			camera.zoomSpeed*camera.getLook());
-	}
-	else if (PRESS_RCTRL) {
-		camera.setEye(camera.getEye() -
-			camera.zoomSpeed*camera.getLook());
+		camera.rotateEye(-camera.getUp(), -0.5*camera.rollSpeed);
 	}
 }
 

@@ -108,17 +108,6 @@ int main(int argc, char* argv[])
 
 	// Init map data
 	Occulus single = Occulus(camera.getEye());
-
-	// set temperature
-	for (int i = 0; i < O_DIM; i++) {
-		for (int j = 0; j < O_DIM; j++) {
-			if ((i + j) % 2 == 0)
-				single.map[i * O_DIM + j].temp = 50;
-			else
-				single.map[i * O_DIM + j].temp = 75;
-		}
-	}
-
 	single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
 	
 	// Setup our VAO array.
@@ -236,15 +225,6 @@ int main(int argc, char* argv[])
 	tNormals.clear();
 	tFaces.clear();
 	tTemps.clear();
-	// set temperature
-	for (int i = 0; i < O_DIM; i++) {
-		for (int j = 0; j < O_DIM; j++) {
-			if ((i + j) % 2 == 0)
-				single.map[i * O_DIM + j].temp = 50;
-			else
-				single.map[i * O_DIM + j].temp = 75;
-		}
-	}
 	single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
 	while (!glfwWindowShouldClose(window)) {
 		// Setup some basic window stuff.
