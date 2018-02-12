@@ -41,7 +41,8 @@ mat4 Camera::getViewMatrix() const
 
 	V = transpose(V);
 
-	return V;
+	//return V;
+	return glm::lookAt(eye, center, up);
 }
 
 // Getters and setters beyond here (needed because setting some components updates multiple components)

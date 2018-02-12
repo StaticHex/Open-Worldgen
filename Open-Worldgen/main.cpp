@@ -26,10 +26,10 @@ void main()
     // Transform vertex into clipping coordinates
 	wPos = vPos;
 	gl_Position = projection * view * vPos;
-	cDir = cPos - gl_Position;
+	cDir = vec4(cPos.xyz - gl_Position.xyz, 1.0);
 
     // Compute light direction and transform to camera coordinates
-    lDir = normalize(lPos - vPos);
+    lDir = vec4(normalize(lPos.xyz), 1.0);
 
     //  Transform normal to camera coordinates
     normal = vNorm;
@@ -52,21 +52,24 @@ uniform float shininess;
 out vec4 fCol;
 void main()
 {
+	vec3 N = normal.xyz;
+	vec3 L = lDir.xyz;
+	vec3 C = cDir.xyz;
 	// calculate ambient component
-	 vec4 amb = ambConst * ambient + diffuse * (ambConst / 2.0);
+	 vec3 amb = ambConst * ambient.xyz + diffuse.xyz * (ambConst / 2.0);
 
 	// calculate diffuse component
-     vec4 diff = diffuse * max(dot(normal,lDir), 0.0);
+     vec3 diff = diffuse.xyz * max(dot(L,N), 0.0);
           diff = clamp(diff, 0.0, 1.0);
 
 	// calculate specular component
-    vec4 rflct = normalize(-reflect(lDir, normal));
-	vec4 spec = specular * pow(max(dot(rflct,cDir),0.0),0.3*shininess);
+    vec3 rflct = normalize(-reflect(L, N));
+	vec3 spec = specular.xyz * pow(max(dot(rflct,C),0.0),0.3*shininess);
          spec = clamp(spec, 0.0, 1.0);
 
 	// combine components and set fully opaque
-	fCol = diff + amb + spec;
-	fCol.w = 1.0;
+	fCol = vec4(diff + amb + spec, 1.0);
+	//fCol = diffuse;
 }
 )zzz";
 
@@ -232,6 +235,7 @@ int main(int argc, char* argv[])
 		glViewport(0, 0, winWidth, winHeight);
 		glClearColor(0.0f, 0.8f, 1.0f, 0.0f);
 		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_MULTISAMPLE);
 		glDepthFunc(GL_LESS);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glEnable(GL_BLEND);

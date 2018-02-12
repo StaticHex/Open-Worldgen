@@ -33,12 +33,14 @@ void Occulus::mapNoise(int index) {
 	double nx = tVec.x / (O_DIM * 1.0) - 0.5;
 	double nz = tVec.z / (O_DIM * 1.0) - 0.5;
 	double tVal = open_simplex_noise2(ctx, nx, nz);
+	
 	double hVal = 1.0 * open_simplex_noise2(ctx, nx * 1.0, nz * 1.0);
 		   hVal+= 0.5 * open_simplex_noise2(ctx, nx * 10.0, nz * 10.0);
 		   hVal += 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 50.0);
 		   hVal = powf(hVal, 4.0);
+		   
 	map[index].temp = tVal * 100.0;
-	map[index].position.y = (hVal) * 20.0;
+		map[index].position.y = hVal * spacing * 40.0;
 }
 
 void Occulus::initMap() {
@@ -64,19 +66,9 @@ void Occulus::update(vec3 pos, vector<vec4> &vertices, vector<vec4> &normals, ve
 	vector<float> &temps) {
 	position.x = pos.x;
 	position.z = pos.z;
-	/*
-	for (int i = 0; i < O_DIM; i++) {
-		for (int j = 0; j < O_DIM; j++) {
-			vec3 v = position + map[i * O_DIM + j].position;
-			if ((int(10*(v.x + v.z))) % 2 == 0)
-				map[i * O_DIM + j].temp = 50;
-			else
-				map[i * O_DIM + j].temp = 75;
-		}
-	}
-	*/
 	updateMap();
 	draw(vertices, normals, uvs, temps);
+	smoothShading(normals);
 }
 
 void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
@@ -94,7 +86,10 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 			float t3 = map[(i + 1)*O_DIM + j].temp;
 			float t4 = map[(i + 1)*O_DIM + (j + 1)].temp;
 			vec4 n1 = calcNormal(p1, p3, p2);
-			vec4 n2 = calcNormal(p2, p3, p4);
+			vec4 n2 = calcNormal(p4, p2, p3);
+
+			nIndex.push_back(n1);
+			nIndex.push_back(n2);
 
 			vertices.push_back(p1);
 			temps.push_back(t1);
@@ -125,6 +120,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 
 void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
 	vector<float> &temps) {
+
 	int limit = O_DIM - 1;
 	for (int i = 0; i < limit; i++) {
 		for (int j = 0; j < limit; j++) {
@@ -137,7 +133,10 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 			float t3 = map[(i + 1)*O_DIM + j].temp;
 			float t4 = map[(i + 1)*O_DIM + (j + 1)].temp;
 			vec4 n1 = calcNormal(p1, p3, p2);
-			vec4 n2 = calcNormal(p2, p3, p4);
+			vec4 n2 = calcNormal(p4, p2, p3);
+
+			nIndex[2 * (i*limit + j)] = n1;
+			nIndex[2 * (i*limit + j) + 1] = n2;
 
 			vertices[6 * (i*limit + j)] = p1;
 			temps[6 * (i*limit + j)]= t1;
@@ -152,12 +151,13 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 			vertices[6 * (i*limit + j) + 3] = p3;
 			temps[6 * (i*limit + j) + 3] = t3;
 			normals[6 * (i*limit + j) + 3] = n2;
-			vertices[6 * (i*limit + j) + 4] = p4;
-			temps[6 * (i*limit + j) + 4] = t4;
-			normals[6 * (i*limit + j) + 4] = n2;
 			vertices[6 * (i*limit + j) + 5] = p2;
 			temps[6 * (i*limit + j) + 5] = t2;
 			normals[6 * (i*limit + j) + 5] = n2;
+			vertices[6 * (i*limit + j) + 4] = p4;
+			temps[6 * (i*limit + j) + 4] = t4;
+			normals[6 * (i*limit + j) + 4] = n2;
+
 		}
 	}
 }
@@ -165,11 +165,136 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 vec4 Occulus::calcNormal(vec3 p1, vec3 p2, vec3 p3) {
 	vec3 U = normalize(p2 - p1);
 	vec3 V = normalize(p3 - p1);
-
-	vec3 normal = vec3(U.y * V.z - U.z * V.y,
-		U.z * V.x - U.x * V.z,
-		U.x * V.y - U.y * V.x);
-
+	//vec3 normal = cross(U, V);
+	vec3 normal;
+	normal.x = U.y * V.z + U.z * V.y;
+	normal.y = U.z * V.x - U.x * V.z;
+	normal.z = U.x * V.y - U.y * V.x;
 	return vec4(normalize(normal), 1.0f);
+}
+
+void Occulus::smoothShading(vector<vec4> &normals) {
+	vector<vec4> nNorm;
+	int limit = O_DIM - 1;
+	int edge = limit - 1;
+
+	vec4 n1;
+	vec4 n2;
+	vec4 n3;
+	vec4 n4;
+	vec4 n5;
+	vec4 n6;
+
+	for (int i = 0; i < limit; i++) {
+		for (int j = 0; j < limit; j++) {
+			// start by initializing n1
+			n1 = nIndex[2 * (i * limit + j)];
+
+			// start by initializing n2
+			n2 = nIndex[2 * (i * limit + j)];
+			n2 += nIndex[2 * (i * limit + j) + 1];
+
+			// start by initializing n3
+			n3 = nIndex[2 * (i * limit + j)];
+			n3 += nIndex[2 * (i * limit + j) + 1];
+
+			// start by initializing n5
+			n5 = nIndex[2 * (i * limit + j) + 1];
+
+			if (i != edge) {
+				// add side to n3
+				n3 += nIndex[2 * ((i + 1)*limit + j)];
+
+				// add sides to n5
+				n5 += nIndex[2 * ((i + 1)*limit + j)];
+				n5 += nIndex[2 * ((i + 1)*limit + j) + 1];
+			}
+			if (j != edge) {
+				// add sides to n5
+				n5 += nIndex[2 * (i*limit + (j + 1))];
+				n5 += nIndex[2 * (i*limit + (j + 1)) + 1];
+
+				if (i != edge) {
+					// add side to n5
+					n5 += nIndex[2 * ((i + 1)*limit + (j + 1))];
+				}
+			}
+
+			if (i) {
+				// add sides to n1
+				n1 += nIndex[2 * ((i - 1) * limit + j)];
+				n1 += nIndex[2 * ((i - 1) * limit + j) + 1];
+
+				// add sides to n2
+				n2 += nIndex[2 * ((i - 1) * limit + j) + 1];
+
+				if (j != edge) {
+					// add sides to n2
+					n2 += nIndex[2 * (i * limit + (j + 1))];
+					n2 += nIndex[2 * ((i - 1) * limit + (j + 1))];
+					n2 += nIndex[2 * ((i - 1) * limit + (j + 1)) + 1];
+				}
+				if (j) {
+					// add sides to n1
+					n1 += nIndex[2 * ((i - 1) * limit + (j - 1)) + 1];
+					n1 += nIndex[2 * (i * limit + (j - 1))];
+					n1 += nIndex[2 * (i * limit + (j - 1)) + 1];
+
+					// add sides to n3
+					n3 += nIndex[2 * (i * limit + (j - 1)) + 1];
+
+					if (i != edge) {
+						// add sides to n3
+						n3 += nIndex[2 * ((i + 1) * limit + (j - 1))];
+						n3 += nIndex[2 * ((i + 1) * limit + (j - 1)) + 1];
+					}
+				}
+			}
+			else {
+				if (j != edge) {
+					// add sides to n2
+					n2 += nIndex[2 * (i * limit + (j + 1))];
+				}
+				if (j) {
+					// add sides to n1
+					n1 += nIndex[2 * (i * limit + (j - 1))];
+					n1 += nIndex[2 * (i * limit + (j - 1)) + 1];
+
+					// add sides to n3
+					n3 += nIndex[2 * (i * limit + (j - 1)) + 1];
+					n3 += nIndex[2 * ((i + 1) * limit + (j - 1))];
+					n3 += nIndex[2 * ((i + 1) * limit + (j - 1)) + 1];
+				}
+			}
+
+			vec3 temp;
+
+			temp = vec3(n1.x, n1.y, n1.z);
+			temp /= glm::length(temp);
+			n1 = vec4(glm::normalize(temp), 1.0f);
+
+			temp = vec3(n2.x, n2.y, n2.z);
+			temp /= glm::length(temp);
+			n2 = vec4(glm::normalize(temp), 1.0f);
+
+			temp = vec3(n3.x, n3.y, n3.z);
+			temp /= glm::length(temp);
+			n3 = vec4(glm::normalize(temp), 1.0f);
+
+			temp = vec3(n5.x, n5.y, n5.z);
+			temp /= glm::length(temp);
+			n5 = vec4(glm::normalize(temp), 1.0f);
+
+			n6 = n2;
+			n4 = n3;
+
+			normals[6 * (i * limit + j)] = n1;
+			normals[6 * (i * limit + j) + 1] = n2;
+			normals[6 * (i * limit + j) + 2] = n3;
+			normals[6 * (i * limit + j) + 3] = n4;
+			normals[6 * (i * limit + j) + 4] = n5;
+			normals[6 * (i * limit + j) + 5] = n6;
+		}
+	}
 }
 
