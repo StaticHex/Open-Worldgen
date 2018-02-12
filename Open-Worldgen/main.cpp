@@ -7,6 +7,7 @@ R"zzz(#version 330 core
 in vec4 vPos;
 in vec4 vNorm;
 in float temp;
+in float height;
 uniform mat4 view;
 uniform mat4 projection;
 uniform vec4 lPos;
@@ -24,14 +25,14 @@ void main()
     float B = clamp(-(1.0/25.0)*temp + 2.0, 0.0, 1.0);
 
     // Transform vertex into clipping coordinates
-	wPos = vPos;
-	gl_Position = projection * view * vPos;
-	cDir = vec4(cPos.xyz - gl_Position.xyz, 1.0);
+	wPos = vec4(cPos.x + vPos.x, height, cPos.z + vPos.z, 1.0);
+	gl_Position = projection * view * wPos;
+	cDir = vec4(cPos.xyz - wPos.xyz, 1.0);
 
     // Compute light direction and transform to camera coordinates
     lDir = vec4(normalize(lPos.xyz), 1.0);
 
-    //  Transform normal to camera coordinates
+    // pass normal to fragment shader
     normal = vNorm;
 
     // Set diffuse color according to temperature
@@ -111,7 +112,7 @@ int main(int argc, char* argv[])
 
 	// Init map data
 	Occulus single = Occulus(camera.getEye());
-	single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
+	single.draw(tVertices, tNormals, tUv, tTemps, tHeights, tFaces);
 	
 	// Setup our VAO array.
 	CHECK_GL_ERROR(glGenVertexArrays(kNumVaos, &gArrayObjects[0]));
@@ -148,6 +149,16 @@ int main(int argc, char* argv[])
 	
 	CHECK_GL_ERROR(glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 0, 0));
 	CHECK_GL_ERROR(glEnableVertexAttribArray(2));
+
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kGeometryVao][kHeightBuffer]));
+	// NOTE: We do not send anything right now, we just describe it to OpenGL.
+
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * tHeights.size(), nullptr,
+		GL_STATIC_DRAW));
+
+	CHECK_GL_ERROR(glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 0, 0));
+	CHECK_GL_ERROR(glEnableVertexAttribArray(3));
 
 	// Setup element array buffer.
 	CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gBufferObjects[kGeometryVao][kIndexBuffer]));
@@ -192,6 +203,7 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glBindAttribLocation(tProgram, 0, "vPos"));
 	CHECK_GL_ERROR(glBindAttribLocation(tProgram, 1, "vNorm"));
 	CHECK_GL_ERROR(glBindAttribLocation(tProgram, 2, "temp"));
+	CHECK_GL_ERROR(glBindAttribLocation(tProgram, 3, "height"));
 	CHECK_GL_ERROR(glBindFragDataLocation(tProgram, 0, "fCol"));
 	glLinkProgram(tProgram);
 	CHECK_GL_PROGRAM_ERROR(tProgram);
@@ -228,7 +240,16 @@ int main(int argc, char* argv[])
 	tNormals.clear();
 	tFaces.clear();
 	tTemps.clear();
-	single.draw(tVertices, tNormals, tUv, tTemps, tFaces);
+	tHeights.clear();
+	single.draw(tVertices, tNormals, tUv, tTemps, tHeights, tFaces);
+
+	// Send vertices to the GPU. (Do outside loop for efficiency)
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
+		gBufferObjects[kGeometryVao][kVertexBuffer]));
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * tVertices.size() * 4,
+		&tVertices[0], GL_STATIC_DRAW));
+
 	while (!glfwWindowShouldClose(window)) {
 		// Setup some basic window stuff.
 		glfwGetFramebufferSize(window, &winWidth, &winHeight);
@@ -244,7 +265,7 @@ int main(int argc, char* argv[])
 		// Switch to the Geometry VAO.
 		CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kGeometryVao]));
 
-		single.update(camera.getEye(), tVertices, tNormals, tUv, tTemps);
+		single.update(camera.getEye(), tHeights, tNormals, tUv, tTemps);
 
 		// Compute the projection matrix.
 		aspect = static_cast<float>(winWidth) / winHeight;
@@ -255,12 +276,7 @@ int main(int argc, char* argv[])
 		// FIXME: change eye and center through mouse/keyboard events.
 		mat4 view_matrix = camera.getViewMatrix();
 
-		// Send vertices to the GPU.
-		CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
-			gBufferObjects[kGeometryVao][kVertexBuffer]));
-		CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-			sizeof(float) * tVertices.size() * 4,
-			&tVertices[0], GL_STATIC_DRAW));
+		// Send normals, temps, and heights to the GPU
 		CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
 			gBufferObjects[kGeometryVao][kNormalBuffer]));
 		CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
@@ -271,6 +287,11 @@ int main(int argc, char* argv[])
 		CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
 			sizeof(float) * tTemps.size(),
 			&tTemps[0], GL_STATIC_DRAW));
+		CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
+			gBufferObjects[kGeometryVao][kHeightBuffer]));
+		CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+			sizeof(float) * tHeights.size(),
+			&tHeights[0], GL_STATIC_DRAW));
 
 		// Use our program.
 		CHECK_GL_ERROR(glUseProgram(tProgram));

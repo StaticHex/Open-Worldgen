@@ -66,6 +66,7 @@ float dVl = glm::length(dV);
 // Terrain Shader Variables
 vector<vec4> tVertices;
 vector<float> tTemps;
+vector<float> tHeights;
 vector<vec4> tNormals;
 vector<uvec3> tFaces;
 vector<vec2> tUv;
@@ -85,7 +86,7 @@ const vec4 tSpecular = vec4(0.01f, 0.01f, 0.01f, 1.0f);
 const float tShininess = 0.01f;
 
 // VBO and VAO descriptors
-enum { kVertexBuffer, kNormalBuffer, kTempBuffer, kIndexBuffer, kNumVbos };
+enum { kVertexBuffer, kNormalBuffer, kTempBuffer, kHeightBuffer, kIndexBuffer, kNumVbos };
 
 // VAOs
 enum { kGeometryVao, kNumVaos };

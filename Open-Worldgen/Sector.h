@@ -14,7 +14,7 @@ class Sector {
 public:
 	float temp;
 	int texture;
-	const float size = 0.1f;
+	const float size = 0.25f;
 	vec3 position;
 
 	Sector();

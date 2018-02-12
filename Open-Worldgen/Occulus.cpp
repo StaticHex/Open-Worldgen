@@ -34,13 +34,13 @@ void Occulus::mapNoise(int index) {
 	double nz = tVec.z / (O_DIM * 1.0) - 0.5;
 	double tVal = open_simplex_noise2(ctx, nx, nz);
 	
-	double hVal = 1.0 * open_simplex_noise2(ctx, nx * 1.0, nz * 1.0);
+	double hVal = 1.0 * open_simplex_noise2(ctx, nx * 5.0, nz * 5.0);
 		   hVal+= 0.5 * open_simplex_noise2(ctx, nx * 10.0, nz * 10.0);
 		   hVal += 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 50.0);
 		   hVal = powf(hVal, 4.0);
 		   
 	map[index].temp = tVal * 100.0;
-		map[index].position.y = hVal * spacing * 40.0;
+	map[index].position.y = hVal * 15.0;
 }
 
 void Occulus::initMap() {
@@ -62,17 +62,17 @@ void Occulus::updateMap() {
 	}
 }
 
-void Occulus::update(vec3 pos, vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
+void Occulus::update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<vec2> &uvs,
 	vector<float> &temps) {
 	position.x = pos.x;
 	position.z = pos.z;
 	updateMap();
-	draw(vertices, normals, uvs, temps);
+	draw(normals, uvs, temps, heights);
 	smoothShading(normals);
 }
 
 void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
-	vector<float> &temps, vector<uvec3> &faces) {
+	vector<float> &temps, vector<float> &heights, vector<uvec3> &faces) {
 	int fNum = 0;
 	int limit = O_DIM - 1;
 	for (int i = 0; i < limit; i++) {
@@ -92,24 +92,30 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 			nIndex.push_back(n2);
 
 			vertices.push_back(p1);
+			heights.push_back(p1.y);
 			temps.push_back(t1);
 			normals.push_back(n1);
 			vertices.push_back(p2);
+			heights.push_back(p2.y);
 			temps.push_back(t2);
 			normals.push_back(n1);
 			vertices.push_back(p3);
+			heights.push_back(p3.y);
 			temps.push_back(t3);
 			normals.push_back(n1);
 			faces.push_back(vec3(fNum, fNum + 1, fNum + 2));
 			fNum += 3;
 
 			vertices.push_back(p3);
+			heights.push_back(p3.y);
 			temps.push_back(t3);
 			normals.push_back(n2);
 			vertices.push_back(p4);
+			heights.push_back(p4.y);
 			temps.push_back(t4);
 			normals.push_back(n2);
 			vertices.push_back(p2);
+			heights.push_back(p2.y);
 			temps.push_back(t2);
 			normals.push_back(n2);
 			faces.push_back(vec3(fNum, fNum + 1, fNum + 2));
@@ -118,8 +124,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 	}
 }
 
-void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
-	vector<float> &temps) {
+void Occulus::draw(vector<vec4> &normals, vector<vec2> &uvs, vector<float> &temps, vector<float> &heights) {
 
 	int limit = O_DIM - 1;
 	for (int i = 0; i < limit; i++) {
@@ -138,26 +143,25 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 			nIndex[2 * (i*limit + j)] = n1;
 			nIndex[2 * (i*limit + j) + 1] = n2;
 
-			vertices[6 * (i*limit + j)] = p1;
+			heights[6 * (i*limit + j)] = p1.y;
 			temps[6 * (i*limit + j)]= t1;
 			normals[6 * (i*limit + j)] = n1;
-			vertices[6 * (i*limit + j) + 1] = p2;
+			heights[6 * (i*limit + j) + 1] = p2.y;
 			temps[6 * (i*limit + j) + 1] = t2;
 			normals[6 * (i*limit + j) + 1] = n1;
-			vertices[6 * (i*limit + j) + 2] = p3;
+			heights[6 * (i*limit + j) + 2] = p3.y;
 			temps[6 * (i*limit + j) + 2] = t3;
 			normals[6 * (i*limit + j) + 2] = n1;
 
-			vertices[6 * (i*limit + j) + 3] = p3;
+			heights[6 * (i*limit + j) + 3] = p3.y;
 			temps[6 * (i*limit + j) + 3] = t3;
 			normals[6 * (i*limit + j) + 3] = n2;
-			vertices[6 * (i*limit + j) + 5] = p2;
-			temps[6 * (i*limit + j) + 5] = t2;
-			normals[6 * (i*limit + j) + 5] = n2;
-			vertices[6 * (i*limit + j) + 4] = p4;
+			heights[6 * (i*limit + j) + 4] = p4.y;
 			temps[6 * (i*limit + j) + 4] = t4;
 			normals[6 * (i*limit + j) + 4] = n2;
-
+			heights[6 * (i*limit + j) + 5] = p2.y;
+			temps[6 * (i*limit + j) + 5] = t2;
+			normals[6 * (i*limit + j) + 5] = n2;
 		}
 	}
 }
