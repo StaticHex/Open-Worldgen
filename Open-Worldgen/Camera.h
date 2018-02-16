@@ -4,6 +4,7 @@
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
+#include "Sector.h"
 using glm::mat4;
 using glm::mat3;
 using glm::vec3;
@@ -18,10 +19,10 @@ using glm::rotate;
 
 class Camera {
 public:
-	const float panSpeed = 0.1f;
+	const float panSpeed = Sector().size*2.0f;
 	const float rollSpeed = 0.1f;
-	const float rotationSpeed = 0.05f;
-	const float zoomSpeed = 0.1f;
+	const float rotationSpeed = 0.1f;
+	const float zoomSpeed = Sector().size*2.0f;
 	float cameraDistance;
 	Camera();
 	Camera(float dist);

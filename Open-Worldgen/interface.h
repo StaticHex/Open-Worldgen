@@ -86,7 +86,7 @@ const vec4 tSpecular = vec4(0.01f, 0.01f, 0.01f, 1.0f);
 const float tShininess = 0.01f;
 
 // VBO and VAO descriptors
-enum { kVertexBuffer, kNormalBuffer, kTempBuffer, kHeightBuffer, kIndexBuffer, kNumVbos };
+enum { kVertexBuffer, kNormalBuffer, kTempBuffer, kHeightBuffer, kUVBuffer, kIndexBuffer, kNumVbos };
 
 // VAOs
 enum { kGeometryVao, kNumVaos };
@@ -94,8 +94,6 @@ enum { kGeometryVao, kNumVaos };
 //Variables to hold VAO and VBO descriptors
 GLuint gArrayObjects[kNumVaos]; // Holds VAO descriptors
 GLuint gBufferObjects[kNumVaos][kNumVbos]; // Holds VBO descriptors
-
-// Function Prototypes
 
 // Begin key callbacks and camera controls
 void KeyCallback(GLFWwindow* window,

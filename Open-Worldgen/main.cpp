@@ -6,6 +6,7 @@ const char* tVertexShaderSrc =
 R"zzz(#version 330 core
 in vec4 vPos;
 in vec4 vNorm;
+in vec2 vUV;
 in float temp;
 in float height;
 uniform mat4 view;
@@ -15,6 +16,7 @@ uniform vec4 cPos;
 out vec4 lDir;
 out vec4 cDir;
 out vec4 normal;
+out vec2 UV;
 out vec4 diffuse;
 out vec4 wPos;
 void main()
@@ -35,6 +37,9 @@ void main()
     // pass normal to fragment shader
     normal = vNorm;
 
+	// pass UV to fragment shader
+	UV = vUV;
+
     // Set diffuse color according to temperature
 	diffuse = vec4(R, G, B, 1.0);
 }
@@ -45,11 +50,13 @@ R"zzz(#version 330 core
 in vec4 normal;
 in vec4 lDir;
 in vec4 cDir;
+in vec2 UV;
 in vec4 diffuse;
 uniform float ambConst;
 uniform vec4 ambient;
 uniform vec4 specular;
 uniform float shininess;
+uniform sampler2D texMap;
 out vec4 fCol;
 void main()
 {
@@ -60,7 +67,8 @@ void main()
 	 vec3 amb = ambConst * ambient.xyz + diffuse.xyz * (ambConst / 2.0);
 
 	// calculate diffuse component
-     vec3 diff = diffuse.xyz * max(dot(L,N), 0.0);
+	 vec3 diff = texture(texMap, UV).rgb * max(dot(L,N), 0.0);
+     //vec3 diff = diffuse.xyz * max(dot(L,N), 0.0);
           diff = clamp(diff, 0.0, 1.0);
 
 	// calculate specular component
@@ -109,6 +117,76 @@ int main(int argc, char* argv[])
 	const GLubyte* version = glGetString(GL_VERSION);    // version as a string
 	std::cout << "Renderer: " << renderer << "\n";
 	std::cout << "OpenGL version supported:" << version << "\n";
+
+
+	// BEGIN LOAD TEXTURES INTO OPENGL
+	const char* imagepath = "./assets/128x128atlas.bmp";
+	unsigned char header[54]; // Each BMP file begins with a 54-byte header
+	unsigned int dataPos;	  // Position in the file where the actual data begins
+	unsigned int width, height;
+	unsigned int imageSize; // = width*height
+	unsigned char* data; // the actual data for the image
+	GLuint texID = 0; // our texture object to return
+	FILE* file = fopen(imagepath, "rb");
+
+	// This is here for debugging
+	if (!file) {
+		// Debug code: Used to list contents of directory specified by path
+		// This can be removed if need be
+		vector<std::string> v;
+		std::string path(imagepath);
+		WIN32_FIND_DATA data;
+		HANDLE hFind;
+		if ((hFind = FindFirstFile(path.c_str(), &data)) != INVALID_HANDLE_VALUE) {
+			do {
+				v.push_back(data.cFileName);
+			} while (FindNextFile(hFind, &data) != 0);
+			FindClose(hFind);
+		}
+		for (int i = 0; i < v.size(); i++) {
+			std::cout << v[i].c_str() << std::endl;
+		}
+		// end debug code << end debug code << end debug code 
+		cout << "image failed to load!\n";
+		system("Pause");
+	}
+
+	if ((fread(header, 1, 54, file) != 54) || (header[0] != 'B' && header[1] != 'M')) {
+		std::cout << "image is not .bmp or is corrupted\n";
+		system("Pause");
+	}
+
+	// Get information about the image from the header
+	dataPos = *(int*)&(header[0x0A]);
+	imageSize = *(int*)&(header[0x22]);
+	width = *(int*)&(header[0x12]);
+	height = *(int*)&(header[0x16]);
+
+	// This is here to ensure image is set up correctly (in case header information 
+	// is missing or corrupted and was not caught by debug statements)
+	if (imageSize == 0) {
+		imageSize = width*height * 3;
+	}
+	if (dataPos == 0) {
+		dataPos = 54; // Start reading after the header
+	}
+
+	// read data and close the file
+	data = new unsigned char[imageSize];
+	fread(data, 1, imageSize, file);
+	fclose(file);
+
+	// Load in our texture to our texture object
+	glGenTextures(1, &texID);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texID);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_BGR, GL_UNSIGNED_BYTE, data);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	// END LOAD TEXTURES INTO OPENGL
+
 
 	// Init map data
 	Occulus single = Occulus(camera.getEye());
@@ -160,6 +238,14 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 0, 0));
 	CHECK_GL_ERROR(glEnableVertexAttribArray(3));
 
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kGeometryVao][kUVBuffer]));
+	// NOTE: We do not send anything right now, we just describe it to OpenGL.
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * tUv.size() * 2, nullptr,
+		GL_STATIC_DRAW));
+	CHECK_GL_ERROR(glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, 0, 0));
+	CHECK_GL_ERROR(glEnableVertexAttribArray(4));
+
 	// Setup element array buffer.
 	CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gBufferObjects[kGeometryVao][kIndexBuffer]));
 	CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
@@ -204,6 +290,7 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glBindAttribLocation(tProgram, 1, "vNorm"));
 	CHECK_GL_ERROR(glBindAttribLocation(tProgram, 2, "temp"));
 	CHECK_GL_ERROR(glBindAttribLocation(tProgram, 3, "height"));
+	CHECK_GL_ERROR(glBindAttribLocation(tProgram, 4, "vUV"));
 	CHECK_GL_ERROR(glBindFragDataLocation(tProgram, 0, "fCol"));
 	glLinkProgram(tProgram);
 	CHECK_GL_PROGRAM_ERROR(tProgram);
@@ -233,6 +320,9 @@ int main(int argc, char* argv[])
 	GLint shinyLoc = 0;
 	CHECK_GL_ERROR(shinyLoc =
 		glGetUniformLocation(tProgram, "shininess"));
+	GLint texLoc = 0;
+	CHECK_GL_ERROR(texLoc =
+		glGetUniformLocation(tProgram, "texMap"));
 
 	// run geometry here so old buffers are bound
 	
@@ -240,6 +330,7 @@ int main(int argc, char* argv[])
 	tNormals.clear();
 	tFaces.clear();
 	tTemps.clear();
+	tUv.clear();
 	tHeights.clear();
 	single.draw(tVertices, tNormals, tUv, tTemps, tHeights, tFaces);
 
@@ -249,6 +340,11 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
 		sizeof(float) * tVertices.size() * 4,
 		&tVertices[0], GL_STATIC_DRAW));
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
+		gBufferObjects[kGeometryVao][kUVBuffer]));
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * tUv.size() * 2,
+		&tUv[0], GL_STATIC_DRAW));
 
 	while (!glfwWindowShouldClose(window)) {
 		// Setup some basic window stuff.
@@ -265,7 +361,7 @@ int main(int argc, char* argv[])
 		// Switch to the Geometry VAO.
 		CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kGeometryVao]));
 
-		single.update(camera.getEye(), tHeights, tNormals, tUv, tTemps);
+		single.update(camera.getEye(), tHeights, tNormals, tTemps);
 
 		// Compute the projection matrix.
 		aspect = static_cast<float>(winWidth) / winHeight;
@@ -307,6 +403,7 @@ int main(int argc, char* argv[])
 		CHECK_GL_ERROR(glUniform1f(ambCLoc, ambConstant));
 		CHECK_GL_ERROR(glUniform4fv(specLoc, 1, &tSpecular[0]));
 		CHECK_GL_ERROR(glUniform1f(shinyLoc, tShininess));
+		CHECK_GL_ERROR(glUniform1i(texLoc, 0));
 		//CHECK_GL_ERROR(glUniform1i(tex_location, 0));
 
 		// Draw our triangles.

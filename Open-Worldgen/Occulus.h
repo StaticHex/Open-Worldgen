@@ -4,6 +4,11 @@
 #define O_DIM C_DIM * O_NUM
 #define O_MIN -(O_DIM / 2)
 #define O_MAX (O_DIM / 2)
+#define UVX_MIN 0.0
+#define UVX_MAX 0.24
+#define UVY_MIN 0.0
+#define UVY_MAX 0.50
+
 #include "Sector.h"
 #include "OpenSimplex.h"
 using glm::cross;
@@ -18,8 +23,7 @@ public:
 	Occulus(vec3 pos);
 	void draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
 		vector<float> &temps, vector<float> &heights, vector<uvec3> &faces);
-	void update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<vec2> &uvs,
-		vector<float> &temps);
+	void update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<float> &temps);
 private:
 	float spacing;
 	void initMap();
@@ -29,6 +33,5 @@ private:
 	struct osn_context *ctx;
 	vec4 calcNormal(vec3 p1, vec3 p2, vec3 p3);
 	void smoothShading(vector<vec4> &normals);
-	void draw(vector<vec4> &normals, vector<vec2> &uvs,
-		vector<float> &temps, vector<float> &heights);
+	void draw(vector<vec4> &normals, vector<float> &temps, vector<float> &heights);
 };
