@@ -17,8 +17,11 @@ out vec4 lDir;
 out vec4 cDir;
 out vec4 normal;
 out vec2 UV;
+out float fTemp;
+out float fHeight;
 out vec4 diffuse;
 out vec4 wPos;
+
 void main()
 {
     // Compute color values based on temperature 0*F = Blue, 100*F = Red
@@ -40,6 +43,10 @@ void main()
 	// pass UV to fragment shader
 	UV = vUV;
 
+	// pass height and temperature to fragment shader
+	fTemp = temp;
+	fHeight = height;
+
     // Set diffuse color according to temperature
 	diffuse = vec4(R, G, B, 1.0);
 }
@@ -51,6 +58,8 @@ in vec4 normal;
 in vec4 lDir;
 in vec4 cDir;
 in vec2 UV;
+in float fTemp;
+in float fHeight;
 in vec4 diffuse;
 uniform float ambConst;
 uniform vec4 ambient;
@@ -58,16 +67,49 @@ uniform vec4 specular;
 uniform float shininess;
 uniform sampler2D texMap;
 out vec4 fCol;
+
 void main()
 {
 	vec3 N = normal.xyz;
 	vec3 L = lDir.xyz;
 	vec3 C = cDir.xyz;
+	vec4 tex = texture2D(texMap, UV);
+	vec4 sandTex = texture2D(texMap, UV+vec2(0.76, 0.5));
+	vec4 rockTex = texture2D(texMap, UV+vec2(0.51, 0.5));
+	vec4 grassTex = texture2D(texMap, UV+vec2(0.0, 0.5));
+	vec4 iceTex = texture2D(texMap, UV+vec2(0.25, 0.5));
+	vec4 snowTex = texture2D(texMap, UV+vec2(0.255, 0.0));
+	vec4 gravelTex = texture2D(texMap, UV+vec2(0.5, 0.0));
+
+	// height and temp modifiers
+	float hMod = clamp(log(-fHeight+5.0)+0.5, 0.0, 1.0);
+	float snHMod = clamp(sin(fTemp/5.0 - 6.2), 0.0, 1.0);
+	float saMod = clamp((fTemp  - 75.0)/5.0+0.5,0.0,1.0);
+	float rMod = clamp(-(fTemp  - 45.0)/5.0+1.0,0.0,1.0);
+	float iMod = clamp(-(fTemp - 30.0)/10.0+0.25,0.0,1.0);
+	float snMod = clamp(-(fTemp - 25.0)/15.0+1.0,0.0,1.0);
+	float gMod = clamp(sin(fTemp/13-3.05),0.0,1.0);
+
+	// add in sand
+	tex = (1.0-saMod)*tex + saMod*sandTex;
+
+	// add in rock
+	tex = (1.0 - hMod)*((1.0 - rMod)*tex + rMod*rockTex) + hMod*rockTex;
+
+	// add ice
+	tex = (1.0-iMod)*tex + iMod*iceTex;
+
+	// add snow
+	tex = (1.0-snMod)*tex + snMod*snowTex;
+
+	// Add in grass
+	tex = hMod*((1.0-gMod)*tex + gMod*grassTex) + (1.0-hMod)*tex;
+
 	// calculate ambient component
 	 vec3 amb = ambConst * ambient.xyz + diffuse.xyz * (ambConst / 2.0);
 
 	// calculate diffuse component
-	 vec3 diff = texture(texMap, UV).rgb * max(dot(L,N), 0.0);
+	 vec3 diff = tex.rgb * max(dot(L,N), 0.0);
      //vec3 diff = diffuse.xyz * max(dot(L,N), 0.0);
           diff = clamp(diff, 0.0, 1.0);
 
