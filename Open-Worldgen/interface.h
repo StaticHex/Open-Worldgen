@@ -71,25 +71,38 @@ vector<vec4> tNormals;
 vector<uvec3> tFaces;
 vector<vec2> tUv;
 
+// Water Shader Variables
+vector<vec4> wVertices;
+vector<vec4> wNormals;
+vector<uvec3> wFaces;
+vector<vec2> wUV;
+
 // Create the camera
-Camera camera = Camera();
+Camera camera = Camera(10.0);
 
 // upper and lower bounds
 vec4 min_bounds = vec4(-(numeric_limits<float>::max)());
 vec4 max_bounds = vec4((numeric_limits<float>::max)());
 
-// Shader constants
+// Universal shader constants
 vec4 lightPos = vec4(10.0f, 100.0f, 0.0f, 1.0f);
 const float ambConstant = 0.10f;
+
+// Terrain Shader constants
 const vec4 tAmbient = vec4(1.0f, 1.0f, 0.875f, 1.0f);
 const vec4 tSpecular = vec4(0.01f, 0.01f, 0.01f, 1.0f);
 const float tShininess = 0.01f;
+
+// Water Shader constants
+const vec4 wAmbient = vec4(1.0f, 1.0f, 0.875f, 1.0f);
+const vec4 wSpecular = vec4(0.01f, 0.01f, 0.01f, 1.0f);
+const float wShininess = 0.01f;
 
 // VBO and VAO descriptors
 enum { kVertexBuffer, kNormalBuffer, kTempBuffer, kHeightBuffer, kUVBuffer, kIndexBuffer, kNumVbos };
 
 // VAOs
-enum { kGeometryVao, kNumVaos };
+enum { kGeometryVao, kWaterVao, kNumVaos };
 
 //Variables to hold VAO and VBO descriptors
 GLuint gArrayObjects[kNumVaos]; // Holds VAO descriptors

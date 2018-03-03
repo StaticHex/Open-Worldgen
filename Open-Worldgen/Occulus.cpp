@@ -5,7 +5,8 @@ using glm::clamp;
 // @description:
 // - Used to create a new view area centered at X:0.0, Y:0.0, Z:0.0
 Occulus::Occulus() :
-	spacing(Sector().size * 2.0)
+	spacing(Sector().size * 2.0),
+	seaLevel(1.0)
 {
 	position = vec3(0.0f, 0.0f, 0.0f);
 	size = spacing * O_DIM * C_DIM;
@@ -22,9 +23,10 @@ Occulus::Occulus() :
 // - Uses passed in x, y, and z coordinates to create a new
 //   view area centered at hte specified location
 Occulus::Occulus(float x, float y, float z) :
-	spacing(Sector().size * 2.0)
+	position(vec3(x, y, z)),
+	spacing(Sector().size * 2.0),
+	seaLevel(1.0)
 {
-	position = vec3(x, y, z);
 	size = spacing * O_DIM * C_DIM;
 	open_simplex_noise(77374, &ctx);
 	initMap();
@@ -37,8 +39,9 @@ Occulus::Occulus(float x, float y, float z) :
 // - uses the passed vector as the center position for the 
 //  view area
 Occulus::Occulus(vec3 pos) :
-	position(vec3(pos.x, pos.y, pos.z)),
-	spacing(Sector().size * 2.0)
+	position(pos),
+	spacing(Sector().size * 2.0),
+	seaLevel(1.0)
 {
 	size = spacing * O_DIM;
 	open_simplex_noise(77374, &ctx);
@@ -110,7 +113,6 @@ void Occulus::update(vec3 pos, vector<float> &heights, vector<vec4> &normals, ve
 	position.z = pos.z;
 	updateMap();
 	draw(normals, temps, heights);
-	smoothShading(normals);
 }
 
 // Draw Method (Public)
@@ -128,25 +130,31 @@ void Occulus::update(vec3 pos, vector<float> &heights, vector<vec4> &normals, ve
 //   calculations.
 void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
 	vector<float> &temps, vector<float> &heights, vector<uvec3> &faces) {
-	int fNum = 0;
+	int indNum = 0;
 	int limit = O_DIM - 1;
+	indexMap.clear(); // clear our map and get ready to init water
+
+	std::map<int, int>::iterator it; // create an iterator to check for existence of keys in map
+
 	for (int i = 0; i < limit; i++) {
 		for (int j = 0; j < limit; j++) {
-			// calculate initial vertex positions
-			vec4 p1 = vec4(map[i*O_DIM + j].position, 1.0);
-			vec4 p2 = vec4(map[i*O_DIM + (j + 1)].position, 1.0);
-			vec4 p3 = vec4(map[(i + 1)*O_DIM + j].position, 1.0);
-			vec4 p4 = vec4(map[(i + 1)*O_DIM + (j + 1)].position, 1.0);
+			// get index positions from global grid
+			float ind1 = i*O_DIM + j;
+			float ind2 = i*O_DIM + (j + 1);
+			float ind3 = (i + 1)*O_DIM + j;
+			float ind4 = (i + 1)*O_DIM + (j + 1);
 
-			// grab the temperatures for each point from our sector map
-			float t1 = map[i*O_DIM + j].temp;
-			float t2 = map[i*O_DIM + (j + 1)].temp;
-			float t3 = map[(i + 1)*O_DIM + j].temp;
-			float t4 = map[(i + 1)*O_DIM + (j + 1)].temp;
+			// create two faces
+			uvec3 f1 = uvec3(0, 0, 0);
+			uvec3 f2 = uvec3(0, 0, 0);
 
-			// calculate the face normals for our triangles
-			vec4 n1 = calcNormal(p1, p3, p2);
-			vec4 n2 = calcNormal(p4, p2, p3);
+			vec3 p1 = map[ind1].position;
+			vec3 p2 = map[ind2].position;
+			vec3 p3 = map[ind3].position;
+			vec3 p4 = map[ind4].position;
+
+			vec3 n1 = calcNormal(p1, p3, p2);
+			vec3 n2 = calcNormal(p4, p2, p3);
 
 			// calculate the UV values for each point
 			vec2 p1Uv = vec2(UVX_MIN, UVY_MIN);
@@ -154,45 +162,332 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 			vec2 p3Uv = vec2(UVX_MIN, UVY_MAX);
 			vec2 p4Uv = vec2(UVX_MAX, UVY_MAX);
 
-			uvs.push_back(p1Uv);
-			uvs.push_back(p2Uv);
-			uvs.push_back(p3Uv);
-			uvs.push_back(p3Uv);
-			uvs.push_back(p4Uv);
-			uvs.push_back(p2Uv);
+			// Check for existence of ind1 in our map
+			it = indexMap.find(ind1);
+			if (it != indexMap.end())
+			{
+				// calculate the index
+				int idx = it->second;
 
-			nIndex.push_back(n1);
-			nIndex.push_back(n2);
-			vertices.push_back(p1);
-			heights.push_back(p1.y);
-			temps.push_back(t1);
-			normals.push_back(n1);
-			vertices.push_back(p2);
-			heights.push_back(p2.y);
-			temps.push_back(t2);
-			normals.push_back(n1);
-			vertices.push_back(p3);
-			heights.push_back(p3.y);
-			temps.push_back(t3);
-			normals.push_back(n1);
-			faces.push_back(vec3(fNum, fNum + 1, fNum + 2));
-			fNum += 3;
+				// set properties for p1
+				f1.x = idx;
+				normals[idx].x += n1.x;
+				normals[idx].y += n1.y;
+				normals[idx].z += n1.z;
+			}
+			else {
+				// add properties to p1 to arrays and then increment our index
+				f1.x = indNum;
+				vertices.push_back(vec4(p1, 1.0));
+				normals.push_back(vec4(n1, 1.0));
+				uvs.push_back(p1Uv);
+				temps.push_back(map[ind1].temp);
+				heights.push_back(map[ind1].position.y);
+				indexMap.insert({ ind1, indNum });
+				indNum++;
+			}
 
-			vertices.push_back(p3);
-			heights.push_back(p3.y);
-			temps.push_back(t3);
-			normals.push_back(n2);
-			vertices.push_back(p4);
-			heights.push_back(p4.y);
-			temps.push_back(t4);
-			normals.push_back(n2);
-			vertices.push_back(p2);
-			heights.push_back(p2.y);
-			temps.push_back(t2);
-			normals.push_back(n2);
-			faces.push_back(vec3(fNum, fNum + 1, fNum + 2));
-			fNum += 3;
+			// Check for the existence of ind2 in our map
+			it = indexMap.find(ind2);
+			if (it != indexMap.end())
+			{
+				// calculate the index
+				int idx = it->second;
+
+				// set properties for p2
+				f1.y = idx;
+				normals[idx].x += n1.x;
+				normals[idx].y += n1.y;
+				normals[idx].z += n1.z;
+
+				// set properties for p6
+				f2.z = idx;
+				normals[idx].x += n2.x;
+				normals[idx].y += n2.y;
+				normals[idx].z += n2.z;
+			}
+			else {
+				// add properties to p2 to arrays
+				f1.y = indNum;
+				vertices.push_back(vec4(p2, 1.0));
+				normals.push_back(vec4(n1, 1.0));
+				temps.push_back(map[ind2].temp);
+				heights.push_back(map[ind2].position.y);
+				uvs.push_back(p2Uv);
+
+
+				// add properties for p6 to arrays
+				f2.z = indNum;
+				normals[indNum].x += n2.x;
+				normals[indNum].y += n2.y;
+				normals[indNum].z += n2.z;
+
+				// add index to map and increment index
+				indexMap.insert({ ind2, indNum });
+				indNum++;
+			}
+
+			// Check for the existence of ind3 in our map
+			it = indexMap.find(ind3);
+			if (it != indexMap.end())
+			{
+				// calculate the index
+				int idx = it->second;
+
+				// set properties for p3
+				f1.z = idx;
+				normals[idx].x += n1.x;
+				normals[idx].y += n1.y;
+				normals[idx].z += n1.z;
+
+				// set properties for p4
+				f2.x = idx;
+				normals[idx].x += n2.x;
+				normals[idx].y += n2.y;
+				normals[idx].z += n2.z;
+			}
+			else {
+				// add properties to p3 to arrays
+				f1.z = indNum;
+				vertices.push_back(vec4(p3, 1.0));
+				normals.push_back(vec4(n1, 1.0));
+				temps.push_back(map[ind3].temp);
+				heights.push_back(map[ind3].position.y);
+				uvs.push_back(p3Uv);
+
+				// add properties for p6 to arrays
+				f2.x = indNum;
+				normals[indNum].x += n2.x;
+				normals[indNum].y += n2.y;
+				normals[indNum].z += n2.z;
+
+				// increment index
+				indexMap.insert({ ind3, indNum });
+				indNum++;
+			}
+
+			// Check for existence of ind4 in our map
+			it = indexMap.find(ind4);
+			if (it != indexMap.end())
+			{
+				// calculate the index
+				int idx = it->second;
+
+				// set properties for p1
+				f2.y = idx;
+				normals[idx].x += n2.x;
+				normals[idx].y += n2.y;
+				normals[idx].z += n2.z;
+			}
+			else {
+				// add properties to p1 to arrays and then increment our index
+				f2.y = indNum;
+				vertices.push_back(vec4(p4, 1.0));
+				normals.push_back(vec4(n2, 1.0));
+				uvs.push_back(p4Uv);
+				temps.push_back(map[ind4].temp);
+				heights.push_back(map[ind4].position.y);
+				indexMap.insert({ ind4, indNum });
+				indNum++;
+			}
+
+			// push our faces
+			faces.push_back(f1);
+			faces.push_back(f2);
 		}
+	}
+
+	// normalize vectors to accomplish smooth shading
+	int normSize = normals.size();
+	for (int i = 0; i < normSize; i++) {
+		vec3 n = vec3(normals[i].x, normals[i].y, normals[i].z);
+		n = glm::normalize(n);
+		normals[i].x = n.x;
+		normals[i].y = n.y;
+		normals[i].z = n.z;
+	}
+}
+
+// Draw Water Method
+// @param
+// - vertices: the location of the vertices making up our water
+// - normals: the location of the normal map for our water
+// - uvs: the location of the UV map for our water
+// - faces: the location of our vertex indicies
+void Occulus::drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs, vector<uvec3>&faces) {
+	int indNum = 0;
+	int limit = O_DIM - 1;
+	indexMap.clear(); // clear our map and get ready to init water
+	std::map<int, int>::iterator it; // create an iterator to check for existence of keys in map
+
+	for (int i = 0; i < limit; i++) {
+		for (int j = 0; j < limit; j++) {
+			// get index positions from global grid
+			float ind1 = i*O_DIM + j;
+			float ind2 = i*O_DIM + (j + 1);
+			float ind3 = (i + 1)*O_DIM + j;
+			float ind4 = (i + 1)*O_DIM + (j + 1);
+
+			// create two faces
+			uvec3 f1 = uvec3(0, 0, 0);
+			uvec3 f2 = uvec3(0, 0, 0);
+
+			vec3 p1 = map[ind1].position;
+			vec3 p2 = map[ind2].position;
+			vec3 p3 = map[ind3].position;
+			vec3 p4 = map[ind4].position;
+
+			p1.y = seaLevel;
+			p2.y = seaLevel;
+			p3.y = seaLevel;
+			p4.y = seaLevel;
+
+			vec3 n1 = calcNormal(p1, p3, p2);
+			vec3 n2 = calcNormal(p4, p2, p3);
+
+			// calculate the UV values for each point
+			float xfac = j*1.0;
+			float yfac = i*1.0;
+			vec2 p1Uv = vec2(UVX_MIN + xfac, UVY_MIN + yfac);
+			vec2 p2Uv = vec2(UVX_MAX + xfac, UVY_MIN + yfac);
+			vec2 p3Uv = vec2(UVX_MIN + xfac, UVY_MAX + yfac);
+			vec2 p4Uv = vec2(UVX_MAX + xfac, UVY_MAX + yfac);
+
+			// Check for existence of ind1 in our map
+			it = indexMap.find(ind1);
+			if (it != indexMap.end())
+			{
+				// calculate the index
+				int idx = it->second;
+
+				// set properties for p1
+				f1.x = idx;
+				normals[idx].x += n1.x;
+				normals[idx].y += n1.y;
+				normals[idx].z += n1.z;
+			}
+			else {
+				// add properties to p1 to arrays and then increment our index
+				f1.x = indNum;
+				vertices.push_back(vec4(p1, 1.0));
+				normals.push_back(vec4(n1, 1.0));
+				uvs.push_back(p1Uv);
+				indexMap.insert({ ind1, indNum });
+				indNum++;
+			}
+
+			// Check for the existence of ind2 in our map
+			it = indexMap.find(ind2);
+			if (it != indexMap.end())
+			{
+				// calculate the index
+				int idx = it->second;
+
+				// set properties for p2
+				f1.y = idx;
+				normals[idx].x += n1.x;
+				normals[idx].y += n1.y;
+				normals[idx].z += n1.z;
+
+				// set properties for p6
+				f2.z = idx;
+				normals[idx].x += n2.x;
+				normals[idx].y += n2.y;
+				normals[idx].z += n2.z;
+			}
+			else {
+				// add properties to p2 to arrays
+				f1.y = indNum;
+				vertices.push_back(vec4(p2, 1.0));
+				normals.push_back(vec4(n1, 1.0));
+				uvs.push_back(p2Uv);
+
+
+				// add properties for p6 to arrays
+				f2.z = indNum;
+				normals[indNum].x += n2.x;
+				normals[indNum].y += n2.y;
+				normals[indNum].z += n2.z;
+
+				// add index to map and increment index
+				indexMap.insert({ ind2, indNum });
+				indNum++;
+			}
+
+			// Check for the existence of ind3 in our map
+			it = indexMap.find(ind3);
+			if (it != indexMap.end())
+			{
+				// calculate the index
+				int idx = it->second;
+
+				// set properties for p3
+				f1.z = idx;
+				normals[idx].x += n1.x;
+				normals[idx].y += n1.y;
+				normals[idx].z += n1.z;
+
+				// set properties for p4
+				f2.x = idx;
+				normals[idx].x += n2.x;
+				normals[idx].y += n2.y;
+				normals[idx].z += n2.z;
+			}
+			else {
+				// add properties to p3 to arrays
+				f1.z = indNum;
+				vertices.push_back(vec4(p3, 1.0));
+				normals.push_back(vec4(n1, 1.0));
+				uvs.push_back(p3Uv);
+
+				// add properties for p6 to arrays
+				f2.z = indNum;
+				normals[indNum].x += n2.x;
+				normals[indNum].y += n2.y;
+				normals[indNum].z += n2.z;
+
+				// increment index
+				indexMap.insert({ ind3, indNum });
+				indNum++;
+			}
+
+			// Check for existence of ind4 in our map
+			it = indexMap.find(ind4);
+			if (it != indexMap.end())
+			{
+				// calculate the index
+				int idx = it->second;
+
+				// set properties for p1
+				f2.y = idx;
+				normals[idx].x += n2.x;
+				normals[idx].y += n2.y;
+				normals[idx].z += n2.z;
+			}
+			else {
+				// add properties to p1 to arrays and then increment our index
+				f2.y = indNum;
+				vertices.push_back(vec4(p4, 1.0));
+				normals.push_back(vec4(n2, 1.0));
+				uvs.push_back(p4Uv);
+				indexMap.insert({ ind4, indNum });
+				indNum++;
+			}
+
+			// push our faces
+			faces.push_back(f1);
+			faces.push_back(f2);
+		}
+	}
+
+	// normalize vectors to accomplish smooth shading
+	int normSize = normals.size();
+	for (int i = 0; i < normSize; i++) {
+		vec3 n = vec3(normals[i].x, normals[i].y, normals[i].z);
+		n = glm::normalize(n);
+		normals[i].x = n.x;
+		normals[i].y = n.y;
+		normals[i].z = n.z;
 	}
 }
 
@@ -205,44 +500,107 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 // - This is the method called by the update function; only udpateds globale
 //   vector maps which have the potential to change between frames
 void Occulus::draw(vector<vec4> &normals, vector<float> &temps, vector<float> &heights) {
-
+	int indNum = 0;
 	int limit = O_DIM - 1;
+	int normSize = normals.size();
+
+	// Clear out normals array
+	for (int i = 0; i < normSize; i++) {
+		normals[i] = vec4(0.0f, 0.0f, 0.0f, 1.0);
+		temps[i] = 0.0;
+		heights[i] = 0.0;
+	}
+
+	// Update normals, temps, and heights
 	for (int i = 0; i < limit; i++) {
 		for (int j = 0; j < limit; j++) {
-			vec4 p1 = vec4(this->position + map[i*O_DIM + j].position, 1.0);
-			vec4 p2 = vec4(this->position + map[i*O_DIM + (j + 1)].position, 1.0);
-			vec4 p3 = vec4(this->position + map[(i + 1)*O_DIM + j].position, 1.0);
-			vec4 p4 = vec4(this->position + map[(i + 1)*O_DIM + (j + 1)].position, 1.0);
-			float t1 = map[i*O_DIM + j].temp;
-			float t2 = map[i*O_DIM + (j + 1)].temp;
-			float t3 = map[(i + 1)*O_DIM + j].temp;
-			float t4 = map[(i + 1)*O_DIM + (j + 1)].temp;
-			vec4 n1 = calcNormal(p1, p3, p2);
-			vec4 n2 = calcNormal(p4, p2, p3);
+			// get index positions from global grid
+			float ind1 = i*O_DIM + j;
+			float ind2 = i*O_DIM + (j + 1);
+			float ind3 = (i + 1)*O_DIM + j;
+			float ind4 = (i + 1)*O_DIM + (j + 1);
 
-			nIndex[2 * (i*limit + j)] = n1;
-			nIndex[2 * (i*limit + j) + 1] = n2;
+			vec3 p1 = map[ind1].position;
+			vec3 p2 = map[ind2].position;
+			vec3 p3 = map[ind3].position;
+			vec3 p4 = map[ind4].position;
 
-			heights[6 * (i*limit + j)] = p1.y;
-			temps[6 * (i*limit + j)]= t1;
-			normals[6 * (i*limit + j)] = n1;
-			heights[6 * (i*limit + j) + 1] = p2.y;
-			temps[6 * (i*limit + j) + 1] = t2;
-			normals[6 * (i*limit + j) + 1] = n1;
-			heights[6 * (i*limit + j) + 2] = p3.y;
-			temps[6 * (i*limit + j) + 2] = t3;
-			normals[6 * (i*limit + j) + 2] = n1;
+			vec3 n1 = calcNormal(p1, p3, p2);
+			vec3 n2 = calcNormal(p4, p2, p3);
 
-			heights[6 * (i*limit + j) + 3] = p3.y;
-			temps[6 * (i*limit + j) + 3] = t3;
-			normals[6 * (i*limit + j) + 3] = n2;
-			heights[6 * (i*limit + j) + 4] = p4.y;
-			temps[6 * (i*limit + j) + 4] = t4;
-			normals[6 * (i*limit + j) + 4] = n2;
-			heights[6 * (i*limit + j) + 5] = p2.y;
-			temps[6 * (i*limit + j) + 5] = t2;
-			normals[6 * (i*limit + j) + 5] = n2;
+			// calculate the UV values for each point
+			vec2 p1Uv = vec2(UVX_MIN, UVY_MIN);
+			vec2 p2Uv = vec2(UVX_MAX, UVY_MIN);
+			vec2 p3Uv = vec2(UVX_MIN, UVY_MAX);
+			vec2 p4Uv = vec2(UVX_MAX, UVY_MAX);
+
+			// Update point for ind1
+			if (indexMap[ind1] == indNum)
+			{
+				// set properties for p1
+				normals[indNum].x += n1.x;
+				normals[indNum].y += n1.y;
+				normals[indNum].z += n1.z;
+				temps[indNum] = map[ind1].temp;
+				heights[indNum] = map[ind1].position.y;
+				indNum++;
+			}
+
+			// Update point for ind2
+			if (indexMap[ind2] == indNum)
+			{
+				// set properties for p2
+				normals[indNum].x += n1.x;
+				normals[indNum].y += n1.y;
+				normals[indNum].z += n1.z;
+				temps[indNum] = map[ind2].temp;
+				heights[indNum] = map[ind2].position.y;
+
+				// set properties for p6
+				normals[indNum].x += n2.x;
+				normals[indNum].y += n2.y;
+				normals[indNum].z += n2.z;
+				indNum++;
+			}
+
+			// Check for the existence of ind3 in our map
+			if (indexMap[ind3] == indNum)
+			{
+				// set properties for p3
+				normals[indNum].x += n1.x;
+				normals[indNum].y += n1.y;
+				normals[indNum].z += n1.z;
+				temps[indNum] = map[ind3].temp;
+				heights[indNum] = map[ind3].position.y;
+
+				// set properties for p4
+				normals[indNum].x += n2.x;
+				normals[indNum].y += n2.y;
+				normals[indNum].z += n2.z;
+				indNum++;
+			}
+
+			// Check for existence of ind4 in our map
+			if (indexMap[ind4] == indNum)
+			{
+				// set properties for p1
+				normals[indNum].x += n2.x;
+				normals[indNum].y += n2.y;
+				normals[indNum].z += n2.z;
+				temps[indNum] = map[ind4].temp;
+				heights[indNum] = map[ind4].position.y;
+				indNum++;
+			}
 		}
+	}
+
+	// normalize vectors to accomplish smooth shading
+	for (int i = 0; i < normSize; i++) {
+		vec3 n = vec3(normals[i].x, normals[i].y, normals[i].z);
+		n = glm::normalize(n);
+		normals[i].x = n.x;
+		normals[i].y = n.y;
+		normals[i].z = n.z;
 	}
 }
 
@@ -259,137 +617,5 @@ vec4 Occulus::calcNormal(vec3 p1, vec3 p2, vec3 p3) {
 	vec3 U = normalize(p2 - p1);
 	vec3 V = normalize(p3 - p1);
 	return vec4(cross(U, V), 1.0f);
-}
-
-// Smooth Shading Method
-// @param
-// - normals: The normal map for the view area
-// @description
-// - Takes in the normal map and averages all normals
-//   at each vertex resulting in the reduction of the 
-//   appearance of edges for each surface.
-void Occulus::smoothShading(vector<vec4> &normals) {
-	vector<vec4> nNorm;
-	int limit = O_DIM - 1;
-	int edge = limit - 1;
-
-	vec4 n1;
-	vec4 n2;
-	vec4 n3;
-	vec4 n4;
-	vec4 n5;
-	vec4 n6;
-
-	for (int i = 0; i < limit; i++) {
-		for (int j = 0; j < limit; j++) {
-			// start by initializing n1
-			n1 = nIndex[2 * (i * limit + j)];
-
-			// start by initializing n2
-			n2 = nIndex[2 * (i * limit + j)];
-			n2 += nIndex[2 * (i * limit + j) + 1];
-
-			// start by initializing n3
-			n3 = nIndex[2 * (i * limit + j)];
-			n3 += nIndex[2 * (i * limit + j) + 1];
-
-			// start by initializing n5
-			n5 = nIndex[2 * (i * limit + j) + 1];
-
-			if (i != edge) {
-				// add side to n3
-				n3 += nIndex[2 * ((i + 1)*limit + j)];
-
-				// add sides to n5
-				n5 += nIndex[2 * ((i + 1)*limit + j)];
-				n5 += nIndex[2 * ((i + 1)*limit + j) + 1];
-			}
-			if (j != edge) {
-				// add sides to n5
-				n5 += nIndex[2 * (i*limit + (j + 1))];
-				n5 += nIndex[2 * (i*limit + (j + 1)) + 1];
-
-				if (i != edge) {
-					// add side to n5
-					n5 += nIndex[2 * ((i + 1)*limit + (j + 1))];
-				}
-			}
-
-			if (i) {
-				// add sides to n1
-				n1 += nIndex[2 * ((i - 1) * limit + j)];
-				n1 += nIndex[2 * ((i - 1) * limit + j) + 1];
-
-				// add sides to n2
-				n2 += nIndex[2 * ((i - 1) * limit + j) + 1];
-
-				if (j != edge) {
-					// add sides to n2
-					n2 += nIndex[2 * (i * limit + (j + 1))];
-					n2 += nIndex[2 * ((i - 1) * limit + (j + 1))];
-					n2 += nIndex[2 * ((i - 1) * limit + (j + 1)) + 1];
-				}
-				if (j) {
-					// add sides to n1
-					n1 += nIndex[2 * ((i - 1) * limit + (j - 1)) + 1];
-					n1 += nIndex[2 * (i * limit + (j - 1))];
-					n1 += nIndex[2 * (i * limit + (j - 1)) + 1];
-
-					// add sides to n3
-					n3 += nIndex[2 * (i * limit + (j - 1)) + 1];
-
-					if (i != edge) {
-						// add sides to n3
-						n3 += nIndex[2 * ((i + 1) * limit + (j - 1))];
-						n3 += nIndex[2 * ((i + 1) * limit + (j - 1)) + 1];
-					}
-				}
-			}
-			else {
-				if (j != edge) {
-					// add sides to n2
-					n2 += nIndex[2 * (i * limit + (j + 1))];
-				}
-				if (j) {
-					// add sides to n1
-					n1 += nIndex[2 * (i * limit + (j - 1))];
-					n1 += nIndex[2 * (i * limit + (j - 1)) + 1];
-
-					// add sides to n3
-					n3 += nIndex[2 * (i * limit + (j - 1)) + 1];
-					n3 += nIndex[2 * ((i + 1) * limit + (j - 1))];
-					n3 += nIndex[2 * ((i + 1) * limit + (j - 1)) + 1];
-				}
-			}
-
-			vec3 temp;
-
-			temp = vec3(n1.x, n1.y, n1.z);
-			temp /= glm::length(temp);
-			n1 = vec4(glm::normalize(temp), 1.0f);
-
-			temp = vec3(n2.x, n2.y, n2.z);
-			temp /= glm::length(temp);
-			n2 = vec4(glm::normalize(temp), 1.0f);
-
-			temp = vec3(n3.x, n3.y, n3.z);
-			temp /= glm::length(temp);
-			n3 = vec4(glm::normalize(temp), 1.0f);
-
-			temp = vec3(n5.x, n5.y, n5.z);
-			temp /= glm::length(temp);
-			n5 = vec4(glm::normalize(temp), 1.0f);
-
-			n6 = n2;
-			n4 = n3;
-
-			normals[6 * (i * limit + j)] = n1;
-			normals[6 * (i * limit + j) + 1] = n2;
-			normals[6 * (i * limit + j) + 2] = n3;
-			normals[6 * (i * limit + j) + 3] = n4;
-			normals[6 * (i * limit + j) + 4] = n5;
-			normals[6 * (i * limit + j) + 5] = n6;
-		}
-	}
 }
 

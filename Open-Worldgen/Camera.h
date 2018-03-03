@@ -19,10 +19,10 @@ using glm::rotate;
 
 class Camera {
 public:
-	const float panSpeed = Sector().size*2.0f;
+	const float panSpeed = Sector().size*2.0;
 	const float rollSpeed = 0.1f;
 	const float rotationSpeed = 0.1f;
-	const float zoomSpeed = Sector().size*2.0f;
+	const float zoomSpeed = Sector().size*2.0;
 	float cameraDistance;
 	Camera();
 	Camera(float dist);

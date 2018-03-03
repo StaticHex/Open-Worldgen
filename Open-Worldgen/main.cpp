@@ -32,7 +32,7 @@ void main()
     // Transform vertex into clipping coordinates
 	wPos = vec4(cPos.x + vPos.x, height, cPos.z + vPos.z, 1.0);
 	gl_Position = projection * view * wPos;
-	cDir = vec4(cPos.xyz - wPos.xyz, 1.0);
+	cDir = vec4(normalize(cPos.xyz - wPos.xyz), 1.0);
 
     // Compute light direction and transform to camera coordinates
     lDir = vec4(normalize(lPos.xyz), 1.0);
@@ -70,9 +70,9 @@ out vec4 fCol;
 
 void main()
 {
-	vec3 N = normal.xyz;
-	vec3 L = lDir.xyz;
-	vec3 C = cDir.xyz;
+	vec3 N = normalize(normal.xyz);
+	vec3 L = normalize(lDir.xyz);
+	vec3 C = normalize(cDir.xyz);
 	vec4 tex = texture2D(texMap, UV);
 	vec4 sandTex = texture2D(texMap, UV+vec2(0.76, 0.5));
 	vec4 rockTex = texture2D(texMap, UV+vec2(0.51, 0.5));
@@ -110,7 +110,6 @@ void main()
 
 	// calculate diffuse component
 	 vec3 diff = tex.rgb * max(dot(L,N), 0.0);
-     //vec3 diff = diffuse.xyz * max(dot(L,N), 0.0);
           diff = clamp(diff, 0.0, 1.0);
 
 	// calculate specular component
@@ -120,7 +119,84 @@ void main()
 
 	// combine components and set fully opaque
 	fCol = vec4(diff + amb + spec, 1.0);
-	//fCol = diffuse;
+	//fCol = vec4(UV.x, 0.0, UV.y, 1.0);
+}
+)zzz";
+
+// WATER SHADERS!! >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+const char* wVertexShaderSrc =
+R"zzz(#version 330 core
+in vec4 vPos;
+in vec4 vNorm;
+in vec2 vUV;
+uniform mat4 view;
+uniform mat4 projection;
+uniform vec4 lPos;
+uniform vec4 cPos;
+out vec4 lDir;
+out vec4 cDir;
+out vec4 normal;
+out vec2 UV;
+out vec4 diffuse;
+out vec4 wPos;
+
+void main()
+{
+    // Transform vertex into clipping coordinates
+	wPos = vec4(cPos.x + vPos.x, vPos.y, cPos.z + vPos.z, 1.0);
+	gl_Position = projection * view * wPos;
+	cDir = vec4(normalize(cPos.xyz - wPos.xyz), 1.0);
+
+    // Compute light direction and transform to camera coordinates
+    lDir = vec4(normalize(lPos.xyz), 1.0);
+
+    // pass normal to fragment shader
+    normal = vNorm;
+
+	// pass UV to fragment shader
+	UV = vUV;
+
+    // Set diffuse color to be blue
+	diffuse = vec4(0.0, 0.0, 1.0, 1.0);
+}
+)zzz";
+
+const char* wFragmentShaderSrc =
+R"zzz(#version 330 core
+in vec4 normal;
+in vec4 lDir;
+in vec4 cDir;
+in vec2 UV;
+in vec4 diffuse;
+uniform float ambConst;
+uniform vec4 ambient;
+uniform vec4 specular;
+uniform float shininess;
+uniform sampler2D texMap;
+out vec4 fCol;
+
+void main()
+{
+	vec3 N = normalize(normal.xyz);
+	vec3 L = normalize(lDir.xyz);
+	vec3 C = normalize(cDir.xyz);
+	vec4 waterTex = texture2D(texMap, UV);
+	vec4 tex = waterTex;
+
+	// calculate ambient component
+	vec3 amb = ambConst * ambient.xyz + diffuse.xyz * (ambConst / 2.0);
+
+	// calculate diffuse component
+	vec3 diff = tex.rgb * max(dot(L,N), 0.0);
+         diff = clamp(diff, 0.0, 1.0);
+
+	// calculate specular component
+    vec3 rflct = normalize(-reflect(L, N));
+	vec3 spec = specular.xyz * pow(max(dot(rflct,C),0.0),0.3*shininess);
+         spec = clamp(spec, 0.0, 1.0);
+
+	// combine components and set fully opaque
+	fCol = vec4(diff + amb + spec, 1.0);
 }
 )zzz";
 
@@ -160,7 +236,6 @@ int main(int argc, char* argv[])
 	std::cout << "Renderer: " << renderer << "\n";
 	std::cout << "OpenGL version supported:" << version << "\n";
 
-
 	// BEGIN LOAD TEXTURES INTO OPENGL
 	const char* imagepath = "./assets/128x128atlas.bmp";
 	unsigned char header[54]; // Each BMP file begins with a 54-byte header
@@ -169,6 +244,7 @@ int main(int argc, char* argv[])
 	unsigned int imageSize; // = width*height
 	unsigned char* data; // the actual data for the image
 	GLuint texID = 0; // our texture object to return
+	GLuint waterTex = 1; // our water texture
 	FILE* file = fopen(imagepath, "rb");
 
 	// This is here for debugging
@@ -223,17 +299,40 @@ int main(int argc, char* argv[])
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, texID);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_BGR, GL_UNSIGNED_BYTE, data);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	// END LOAD TEXTURES INTO OPENGL
+
+	int subImgSize = (width/4)*(height/2);
+	unsigned char* waterData;
+	waterData = new unsigned char[subImgSize*2];
+	for (int i = 0; i < subImgSize*2; i++) {
+		waterData[i] = data[i];
+	}
+
+	glGenTextures(1, &waterTex);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, waterTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width/4, height/2, 0, GL_BGR, GL_UNSIGNED_BYTE, waterData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 
 	// Init map data
 	Occulus single = Occulus(camera.getEye());
 	single.draw(tVertices, tNormals, tUv, tTemps, tHeights, tFaces);
+	single.drawWater(wVertices, wNormals, wUV, wFaces);
 	
+
+	/* 
+	================================================================================
+	== Begin Setup for Terrain Shaders                                            ==
+	================================================================================
+	*/
 	// Setup our VAO array.
 	CHECK_GL_ERROR(glGenVertexArrays(kNumVaos, &gArrayObjects[0]));
 	
@@ -366,15 +465,137 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(texLoc =
 		glGetUniformLocation(tProgram, "texMap"));
 
+	/*
+	================================================================================
+	== BEGIN SETUP FOR WATER SHADERS                                              ==
+	================================================================================
+	*/
+
+	// Switch to the VAO for Geometry.
+	CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kWaterVao]));
+
+	// Generate buffer objects
+	CHECK_GL_ERROR(glGenBuffers(kNumVbos, &gBufferObjects[kWaterVao][0]));
+
+	// Setup vertex data in a VBO.
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kWaterVao][kVertexBuffer]));
+	// NOTE: We do not send anything right now, we just describe it to OpenGL.
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * wVertices.size() * 4, nullptr,
+		GL_STATIC_DRAW));
+	CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
+	CHECK_GL_ERROR(glEnableVertexAttribArray(0));
+
+
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kWaterVao][kNormalBuffer]));
+	// NOTE: We do not send anything right now, we just describe it to OpenGL.
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * wNormals.size() * 4, nullptr,
+		GL_STATIC_DRAW));
+	CHECK_GL_ERROR(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0));
+	CHECK_GL_ERROR(glEnableVertexAttribArray(1));
+
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kWaterVao][kUVBuffer]));
+	// NOTE: We do not send anything right now, we just describe it to OpenGL.
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * wUV.size() * 2, nullptr,
+		GL_STATIC_DRAW));
+	CHECK_GL_ERROR(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0));
+	CHECK_GL_ERROR(glEnableVertexAttribArray(2));
+
+	// Setup element array buffer.
+	CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gBufferObjects[kWaterVao][kIndexBuffer]));
+	CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+		sizeof(uint32_t) * wFaces.size() * 3,
+		&wFaces[0], GL_STATIC_DRAW));
+
+	// Setup vertex shader.
+	GLuint wVertexShader = 0;
+	const char* wVertexShaderSrcPtr = wVertexShaderSrc;
+	CHECK_GL_ERROR(wVertexShader = glCreateShader(GL_VERTEX_SHADER));
+	CHECK_GL_ERROR(glShaderSource(wVertexShader, 1, &wVertexShaderSrcPtr, nullptr));
+	glCompileShader(wVertexShader);
+	CHECK_GL_SHADER_ERROR(wVertexShader);
+
+	// Setup fragment shader.
+	GLuint wFragmentShader = 0;
+	const char* wFragmentShaderSrcPtr = wFragmentShaderSrc;
+	CHECK_GL_ERROR(wFragmentShader = glCreateShader(GL_FRAGMENT_SHADER));
+	CHECK_GL_ERROR(glShaderSource(wFragmentShader, 1, &wFragmentShaderSrcPtr, nullptr));
+	glCompileShader(wFragmentShader);
+	CHECK_GL_SHADER_ERROR(wFragmentShader);
+
+	// Let's create our program.
+	GLuint wProgram = 0;
+	CHECK_GL_ERROR(wProgram = glCreateProgram());
+	CHECK_GL_ERROR(glAttachShader(wProgram, wVertexShader));
+	CHECK_GL_ERROR(glAttachShader(wProgram, wFragmentShader));
+
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kWaterVao][kVertexBuffer]));
+	// NOTE: We do not send anything right now, we just describe it to OpenGL.
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * wVertices.size() * 4, nullptr,
+		GL_STATIC_DRAW));
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kWaterVao][kNormalBuffer]));
+	// NOTE: We do not send anything right now, we just describe it to OpenGL.
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * wNormals.size() * 4, nullptr,
+		GL_STATIC_DRAW));
+	// Bind attributes.
+	CHECK_GL_ERROR(glBindAttribLocation(wProgram, 0, "vPos"));
+	CHECK_GL_ERROR(glBindAttribLocation(wProgram, 1, "vNorm"));
+	CHECK_GL_ERROR(glBindAttribLocation(wProgram, 2, "vUV"));
+	CHECK_GL_ERROR(glBindFragDataLocation(wProgram, 0, "fCol"));
+	glLinkProgram(wProgram);
+	CHECK_GL_PROGRAM_ERROR(wProgram);
+
+	// Get the uniform locations.
+	GLint projMatLocW = 0;
+	CHECK_GL_ERROR(projMatLocW =
+		glGetUniformLocation(wProgram, "projection"));
+	GLint viewMatLocW = 0;
+	CHECK_GL_ERROR(viewMatLocW =
+		glGetUniformLocation(wProgram, "view"));
+	GLint lPosLocW = 0;
+	CHECK_GL_ERROR(lPosLocW =
+		glGetUniformLocation(wProgram, "lPos"));
+	GLint cPosLocW = 0;
+	CHECK_GL_ERROR(cPosLocW =
+		glGetUniformLocation(wProgram, "cPos"));
+	GLint ambCLocW = 0;
+	CHECK_GL_ERROR(ambCLocW =
+		glGetUniformLocation(wProgram, "ambConst"));
+	GLint ambLocW = 0;
+	CHECK_GL_ERROR(ambLocW =
+		glGetUniformLocation(wProgram, "ambient"));
+	GLint specLocW = 0;
+	CHECK_GL_ERROR(specLocW =
+		glGetUniformLocation(wProgram, "specular"));
+	GLint shinyLocW = 0;
+	CHECK_GL_ERROR(shinyLocW =
+		glGetUniformLocation(wProgram, "shininess"));
+	GLint texLocW = 0;
+	CHECK_GL_ERROR(texLocW =
+		glGetUniformLocation(wProgram, "texMap"));
+
+	/*
+	================================================================================
+	== END OF SHADER SETUP AREA                                                   ==
+	================================================================================
+	*/
 	// run geometry here so old buffers are bound
-	
 	tVertices.clear();
 	tNormals.clear();
 	tFaces.clear();
 	tTemps.clear();
 	tUv.clear();
 	tHeights.clear();
+	wVertices.clear();
+	wNormals.clear();
+	wUV.clear();
+	wFaces.clear();
 	single.draw(tVertices, tNormals, tUv, tTemps, tHeights, tFaces);
+	single.drawWater(wVertices, wNormals, wUV, wFaces);
 
 	// Send vertices to the GPU. (Do outside loop for efficiency)
 	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
@@ -387,6 +608,19 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
 		sizeof(float) * tUv.size() * 2,
 		&tUv[0], GL_STATIC_DRAW));
+
+	// Send Vertices for water to theGPU
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
+		gBufferObjects[kWaterVao][kVertexBuffer]));
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * wVertices.size() * 4,
+		&wVertices[0], GL_STATIC_DRAW));
+
+	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
+		gBufferObjects[kWaterVao][kUVBuffer]));
+	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+		sizeof(float) * wUV.size() * 2,
+		&wUV[0], GL_STATIC_DRAW));
 
 	while (!glfwWindowShouldClose(window)) {
 		// Setup some basic window stuff.
@@ -411,10 +645,9 @@ int main(int argc, char* argv[])
 			perspective(radians(45.0f), aspect, 0.0001f, 1000.0f);
 
 		// Compute the view matrix
-		// FIXME: change eye and center through mouse/keyboard events.
 		mat4 view_matrix = camera.getViewMatrix();
 
-		// Send normals, temps, and heights to the GPU
+		// Send normals, temps, and heights to the GPU for terrain generator
 		CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
 			gBufferObjects[kGeometryVao][kNormalBuffer]));
 		CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
@@ -434,7 +667,7 @@ int main(int argc, char* argv[])
 		// Use our program.
 		CHECK_GL_ERROR(glUseProgram(tProgram));
 
-		// Pass uniforms in.
+		// Pass uniforms for terrain shaders in.
 		CHECK_GL_ERROR(glUniformMatrix4fv(projMatLoc, 1, GL_FALSE,
 			&projection_matrix[0][0]));
 		CHECK_GL_ERROR(glUniformMatrix4fv(viewMatLoc, 1, GL_FALSE,
@@ -446,11 +679,41 @@ int main(int argc, char* argv[])
 		CHECK_GL_ERROR(glUniform4fv(specLoc, 1, &tSpecular[0]));
 		CHECK_GL_ERROR(glUniform1f(shinyLoc, tShininess));
 		CHECK_GL_ERROR(glUniform1i(texLoc, 0));
-		//CHECK_GL_ERROR(glUniform1i(tex_location, 0));
+
 
 		// Draw our triangles.
 		CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, tFaces.size() * 3, GL_UNSIGNED_INT, 0));
+
+		// Switch to water vao and then send everything to the GPU
+		// Switch to the Water VAO.
+		CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kWaterVao]));
+
+		// Send normals for water shader to GPU here (may remove later)
+		CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
+			gBufferObjects[kWaterVao][kNormalBuffer]));
+		CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
+			sizeof(float) * wNormals.size() * 4,
+			&wNormals[0], GL_STATIC_DRAW));
+
+		// Use our program.
+		CHECK_GL_ERROR(glUseProgram(wProgram));
+
+		// Pass uniforms for water shaders in.
+		CHECK_GL_ERROR(glUniformMatrix4fv(projMatLocW, 1, GL_FALSE,
+			&projection_matrix[0][0]));
+		CHECK_GL_ERROR(glUniformMatrix4fv(viewMatLocW, 1, GL_FALSE,
+			&view_matrix[0][0]));
+		CHECK_GL_ERROR(glUniform4fv(lPosLocW, 1, &lightPos[0]));
+		CHECK_GL_ERROR(glUniform4fv(cPosLocW, 1, &camera.getEye()[0]));
+		CHECK_GL_ERROR(glUniform4fv(ambLocW, 1, &wAmbient[0]));
+		CHECK_GL_ERROR(glUniform1f(ambCLocW, ambConstant));
+		CHECK_GL_ERROR(glUniform4fv(specLocW, 1, &wSpecular[0]));
+		CHECK_GL_ERROR(glUniform1f(shinyLocW, wShininess));
+		CHECK_GL_ERROR(glUniform1i(texLocW, 1));
 		
+		CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, wFaces.size() * 3, GL_UNSIGNED_INT, 0));
+		// END OF WATER SHADER STUFF
+
 		// Poll and swap.
 		glfwPollEvents();
 		glfwSwapBuffers(window);
