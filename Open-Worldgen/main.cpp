@@ -65,7 +65,13 @@ uniform float ambConst;
 uniform vec4 ambient;
 uniform vec4 specular;
 uniform float shininess;
-uniform sampler2D texMap;
+uniform sampler2D dirtTex;
+uniform sampler2D snowTex;
+uniform sampler2D gravelTex;
+uniform sampler2D grassTex;
+uniform sampler2D iceTex;
+uniform sampler2D rockTex;
+uniform sampler2D sandTex;
 out vec4 fCol;
 
 void main()
@@ -73,13 +79,13 @@ void main()
 	vec3 N = normalize(normal.xyz);
 	vec3 L = normalize(lDir.xyz);
 	vec3 C = normalize(cDir.xyz);
-	vec4 tex = texture2D(texMap, UV);
-	vec4 sandTex = texture2D(texMap, UV+vec2(0.76, 0.5));
-	vec4 rockTex = texture2D(texMap, UV+vec2(0.51, 0.5));
-	vec4 grassTex = texture2D(texMap, UV+vec2(0.0, 0.5));
-	vec4 iceTex = texture2D(texMap, UV+vec2(0.25, 0.5));
-	vec4 snowTex = texture2D(texMap, UV+vec2(0.255, 0.0));
-	vec4 gravelTex = texture2D(texMap, UV+vec2(0.5, 0.0));
+	vec4 tex = texture2D(dirtTex, UV);
+	vec4 sandTex = texture2D(sandTex, UV);
+	vec4 rockTex = texture2D(rockTex, UV);
+	vec4 grassTex = texture2D(grassTex, UV);
+	vec4 iceTex = texture2D(iceTex, UV);
+	vec4 snowTex = texture2D(snowTex, UV);
+	vec4 gravelTex = texture2D(gravelTex, UV);
 
 	// height and temp modifiers
 	float hMod = clamp(log(-fHeight+5.0)+0.5, 0.0, 1.0);
@@ -181,7 +187,7 @@ void main()
 	vec3 L = normalize(lDir.xyz);
 	vec3 C = normalize(cDir.xyz);
 	vec4 waterTex = texture2D(texMap, UV);
-	vec4 tex = waterTex;
+	vec4 tex = 0.75*waterTex + 0.25*diffuse;
 
 	// calculate ambient component
 	vec3 amb = ambConst * ambient.xyz + diffuse.xyz * (ambConst / 2.0);
@@ -196,7 +202,7 @@ void main()
          spec = clamp(spec, 0.0, 1.0);
 
 	// combine components and set fully opaque
-	fCol = vec4(diff + amb + spec, 1.0);
+	fCol = vec4(diff + amb + spec, 0.75);
 }
 )zzz";
 
@@ -233,6 +239,7 @@ int main(int argc, char* argv[])
 	glfwSwapInterval(1);
 	const GLubyte* renderer = glGetString(GL_RENDERER);  // get renderer string
 	const GLubyte* version = glGetString(GL_VERSION);    // version as a string
+	GLint depthBufferSize = 0;
 	std::cout << "Renderer: " << renderer << "\n";
 	std::cout << "OpenGL version supported:" << version << "\n";
 
@@ -243,8 +250,24 @@ int main(int argc, char* argv[])
 	unsigned int width, height;
 	unsigned int imageSize; // = width*height
 	unsigned char* data; // the actual data for the image
+	unsigned char* dirtData;
+	unsigned char* snowData;
+	unsigned char* gravelData;
+	unsigned char* waterData;
+	unsigned char* grassData;
+	unsigned char* iceData;
+	unsigned char* rockData;
+	unsigned char* sandData;
+
 	GLuint texID = 0; // our texture object to return
-	GLuint waterTex = 1; // our water texture
+	GLuint dirtTex = 0;
+	GLuint snowTex = 0;
+	GLuint gravelTex = 0;
+	GLuint waterTex = 0; // our water texture
+	GLuint grassTex = 0;
+	GLuint iceTex = 0;
+	GLuint rockTex = 0;
+	GLuint sandTex = 0;
 	FILE* file = fopen(imagepath, "rb");
 
 	// This is here for debugging
@@ -279,6 +302,7 @@ int main(int argc, char* argv[])
 	imageSize = *(int*)&(header[0x22]);
 	width = *(int*)&(header[0x12]);
 	height = *(int*)&(header[0x16]);
+	int subImgSize = (width / 4)*(height / 2) * 3; // the size of an individual texture in the atlas
 
 	// This is here to ensure image is set up correctly (in case header information 
 	// is missing or corrupted and was not caught by debug statements)
@@ -305,15 +329,60 @@ int main(int argc, char* argv[])
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	// END LOAD TEXTURES INTO OPENGL
 
-	int subImgSize = (width/4)*(height/2);
-	unsigned char* waterData;
-	waterData = new unsigned char[subImgSize*2];
-	for (int i = 0; i < subImgSize*2; i++) {
-		waterData[i] = data[i];
+	dirtData = new unsigned char[subImgSize];
+	snowData = new unsigned char[subImgSize];
+	gravelData = new unsigned char[subImgSize];
+	waterData = new unsigned char[subImgSize];
+	grassData = new unsigned char[subImgSize];
+	iceData = new unsigned char[subImgSize];
+	rockData = new unsigned char[subImgSize];
+	sandData = new unsigned char[subImgSize];
+
+	int subW = (width / 4) * 3;
+	int subH = (height / 2);
+	int count = 0;
+	for (int i = 0; i < subH; i++) {
+		for (int j = 0; j < subW; j++) {
+			dirtData[count] = data[i*width * 3 + j];
+			snowData[count] = data[i*width * 3 + j + subW];
+			gravelData[count] = data[i*width * 3 + j + subW * 2];
+			waterData[count] = data[i*width*3 + j +  + subW * 3];
+			grassData[count] = data[i*width * 3 + j + subImgSize * 4];
+			iceData[count] = data[i*width * 3 + j + subImgSize * 4 + subW];
+			rockData[count] = data[i*width * 3 + j + subImgSize * 4 + subW * 2];
+			sandData[count] = data[i*width * 3 + j + subImgSize * 4 + subW * 3];
+			count++;
+		}
 	}
+	glGenTextures(1, &dirtTex);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, dirtTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width / 4, height / 2, 0, GL_BGR, GL_UNSIGNED_BYTE, dirtData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glGenTextures(1, &snowTex);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, snowTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width / 4, height / 2, 0, GL_BGR, GL_UNSIGNED_BYTE, snowData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glGenTextures(1, &gravelTex);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, gravelTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width / 4, height / 2, 0, GL_BGR, GL_UNSIGNED_BYTE, gravelData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 	glGenTextures(1, &waterTex);
-	glActiveTexture(GL_TEXTURE1);
+	glActiveTexture(GL_TEXTURE3);
 	glBindTexture(GL_TEXTURE_2D, waterTex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width/4, height/2, 0, GL_BGR, GL_UNSIGNED_BYTE, waterData);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -321,6 +390,41 @@ int main(int argc, char* argv[])
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
+	glGenTextures(1, &grassTex);
+	glActiveTexture(GL_TEXTURE4);
+	glBindTexture(GL_TEXTURE_2D, grassTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width / 4, height / 2, 0, GL_BGR, GL_UNSIGNED_BYTE, grassData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glGenTextures(1, &iceTex);
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, iceTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width / 4, height / 2, 0, GL_BGR, GL_UNSIGNED_BYTE, iceData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glGenTextures(1, &rockTex);
+	glActiveTexture(GL_TEXTURE6);
+	glBindTexture(GL_TEXTURE_2D, rockTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width / 4, height / 2, 0, GL_BGR, GL_UNSIGNED_BYTE, rockData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glGenTextures(1, &sandTex);
+	glActiveTexture(GL_TEXTURE7);
+	glBindTexture(GL_TEXTURE_2D, sandTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width / 4, height / 2, 0, GL_BGR, GL_UNSIGNED_BYTE, sandData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 	// Init map data
 	Occulus single = Occulus(camera.getEye());
@@ -461,9 +565,27 @@ int main(int argc, char* argv[])
 	GLint shinyLoc = 0;
 	CHECK_GL_ERROR(shinyLoc =
 		glGetUniformLocation(tProgram, "shininess"));
-	GLint texLoc = 0;
-	CHECK_GL_ERROR(texLoc =
-		glGetUniformLocation(tProgram, "texMap"));
+	GLint dirtTexLoc = 0;
+	CHECK_GL_ERROR(dirtTexLoc =
+		glGetUniformLocation(tProgram, "dirtTex"));
+	GLint snowTexLoc = 0;
+	CHECK_GL_ERROR(snowTexLoc =
+		glGetUniformLocation(tProgram, "snowTex"));
+	GLint gravelTexLoc = 0;
+	CHECK_GL_ERROR(gravelTexLoc =
+		glGetUniformLocation(tProgram, "gravelTex"));
+	GLint grassTexLoc = 0;
+	CHECK_GL_ERROR(grassTexLoc =
+		glGetUniformLocation(tProgram, "grassTex"));
+	GLint iceTexLoc = 0;
+	CHECK_GL_ERROR(iceTexLoc =
+		glGetUniformLocation(tProgram, "iceTex"));
+	GLint rockTexLoc = 0;
+	CHECK_GL_ERROR(rockTexLoc =
+		glGetUniformLocation(tProgram, "rockTex"));
+	GLint sandTexLoc = 0;
+	CHECK_GL_ERROR(sandTexLoc =
+		glGetUniformLocation(tProgram, "sandTex"));
 
 	/*
 	================================================================================
@@ -641,8 +763,9 @@ int main(int argc, char* argv[])
 
 		// Compute the projection matrix.
 		aspect = static_cast<float>(winWidth) / winHeight;
+
 		mat4 projection_matrix =
-			perspective(radians(45.0f), aspect, 0.0001f, 1000.0f);
+			perspective(radians(45.0f), aspect, 1.0f, 1000.0f);
 
 		// Compute the view matrix
 		mat4 view_matrix = camera.getViewMatrix();
@@ -678,7 +801,13 @@ int main(int argc, char* argv[])
 		CHECK_GL_ERROR(glUniform1f(ambCLoc, ambConstant));
 		CHECK_GL_ERROR(glUniform4fv(specLoc, 1, &tSpecular[0]));
 		CHECK_GL_ERROR(glUniform1f(shinyLoc, tShininess));
-		CHECK_GL_ERROR(glUniform1i(texLoc, 0));
+		CHECK_GL_ERROR(glUniform1i(dirtTexLoc, 0));
+		CHECK_GL_ERROR(glUniform1i(snowTexLoc, 1));
+		CHECK_GL_ERROR(glUniform1i(gravelTexLoc, 2));
+		CHECK_GL_ERROR(glUniform1i(grassTexLoc, 4));
+		CHECK_GL_ERROR(glUniform1i(iceTexLoc, 5));
+		CHECK_GL_ERROR(glUniform1i(rockTexLoc, 6));
+		CHECK_GL_ERROR(glUniform1i(sandTexLoc, 7));
 
 
 		// Draw our triangles.
@@ -709,7 +838,7 @@ int main(int argc, char* argv[])
 		CHECK_GL_ERROR(glUniform1f(ambCLocW, ambConstant));
 		CHECK_GL_ERROR(glUniform4fv(specLocW, 1, &wSpecular[0]));
 		CHECK_GL_ERROR(glUniform1f(shinyLocW, wShininess));
-		CHECK_GL_ERROR(glUniform1i(texLocW, 1));
+		CHECK_GL_ERROR(glUniform1i(texLocW, 3));
 		
 		CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, wFaces.size() * 3, GL_UNSIGNED_INT, 0));
 		// END OF WATER SHADER STUFF

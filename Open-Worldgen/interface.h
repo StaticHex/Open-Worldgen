@@ -78,7 +78,7 @@ vector<uvec3> wFaces;
 vector<vec2> wUV;
 
 // Create the camera
-Camera camera = Camera(10.0);
+Camera camera = Camera(3.0);
 
 // upper and lower bounds
 vec4 min_bounds = vec4(-(numeric_limits<float>::max)());

@@ -6,7 +6,7 @@ using glm::clamp;
 // - Used to create a new view area centered at X:0.0, Y:0.0, Z:0.0
 Occulus::Occulus() :
 	spacing(Sector().size * 2.0),
-	seaLevel(1.0)
+	seaLevel(-0.1)
 {
 	position = vec3(0.0f, 0.0f, 0.0f);
 	size = spacing * O_DIM * C_DIM;
@@ -25,7 +25,7 @@ Occulus::Occulus() :
 Occulus::Occulus(float x, float y, float z) :
 	position(vec3(x, y, z)),
 	spacing(Sector().size * 2.0),
-	seaLevel(1.0)
+	seaLevel(-0.1)
 {
 	size = spacing * O_DIM * C_DIM;
 	open_simplex_noise(77374, &ctx);
@@ -41,7 +41,7 @@ Occulus::Occulus(float x, float y, float z) :
 Occulus::Occulus(vec3 pos) :
 	position(pos),
 	spacing(Sector().size * 2.0),
-	seaLevel(1.0)
+	seaLevel(-0.1)
 {
 	size = spacing * O_DIM;
 	open_simplex_noise(77374, &ctx);
@@ -63,9 +63,10 @@ void Occulus::mapNoise(int index) {
 	
 	double hVal = 1.0 * open_simplex_noise2(ctx, nx * 10.0, nz * 10.0);
 		   hVal+= 0.5 * open_simplex_noise2(ctx, nx * 20.0, nz * 20.0);
-		   hVal += 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 30.0);
+		   hVal+= 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 30.0);
 		   hVal = glm::max(powf(hVal, 2.33334), 0.0f);
-		   hVal *= 20.001;
+		   hVal -= 0.25 * open_simplex_noise2(ctx, nx * 5.0, nz * 5.0);
+		   hVal*= 20.001;
 		   tVal = clamp(tVal * 100.0 - hVal*2.0, 0.0, 100.0);
 	map[index].position.y = hVal;
 	map[index].temp = tVal;
@@ -157,10 +158,12 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 			vec3 n2 = calcNormal(p4, p2, p3);
 
 			// calculate the UV values for each point
-			vec2 p1Uv = vec2(UVX_MIN, UVY_MIN);
-			vec2 p2Uv = vec2(UVX_MAX, UVY_MIN);
-			vec2 p3Uv = vec2(UVX_MIN, UVY_MAX);
-			vec2 p4Uv = vec2(UVX_MAX, UVY_MAX);
+			float xfac = j*1.0;
+			float yfac = i*1.0;
+			vec2 p1Uv = vec2(UVX_MIN + xfac, UVY_MIN + yfac);
+			vec2 p2Uv = vec2(UVX_MAX + xfac, UVY_MIN + yfac);
+			vec2 p3Uv = vec2(UVX_MIN + xfac, UVY_MAX + yfac);
+			vec2 p4Uv = vec2(UVX_MAX + xfac, UVY_MAX + yfac);
 
 			// Check for existence of ind1 in our map
 			it = indexMap.find(ind1);
@@ -529,10 +532,12 @@ void Occulus::draw(vector<vec4> &normals, vector<float> &temps, vector<float> &h
 			vec3 n2 = calcNormal(p4, p2, p3);
 
 			// calculate the UV values for each point
-			vec2 p1Uv = vec2(UVX_MIN, UVY_MIN);
-			vec2 p2Uv = vec2(UVX_MAX, UVY_MIN);
-			vec2 p3Uv = vec2(UVX_MIN, UVY_MAX);
-			vec2 p4Uv = vec2(UVX_MAX, UVY_MAX);
+			float xfac = j*1.0;
+			float yfac = i*1.0;
+			vec2 p1Uv = vec2(UVX_MIN + xfac, UVY_MIN + yfac);
+			vec2 p2Uv = vec2(UVX_MAX + xfac, UVY_MIN + yfac);
+			vec2 p3Uv = vec2(UVX_MIN + xfac, UVY_MAX + yfac);
+			vec2 p4Uv = vec2(UVX_MAX + xfac, UVY_MAX + yfac);
 
 			// Update point for ind1
 			if (indexMap[ind1] == indNum)
