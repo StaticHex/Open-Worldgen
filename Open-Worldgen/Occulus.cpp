@@ -296,6 +296,9 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 
 			// push our faces
 			faces.push_back(f1);
+			int temp = f2.x;
+			f2.x = f2.y;
+			f2.y = temp;
 			faces.push_back(f2);
 		}
 	}
@@ -317,7 +320,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 // - normals: the location of the normal map for our water
 // - uvs: the location of the UV map for our water
 // - faces: the location of our vertex indicies
-void Occulus::drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs, vector<uvec3>&faces) {
+void Occulus::drawWater(vector<vec4> &vertices, vector<vec2> &uvs, vector<uvec3>&faces) {
 	int indNum = 0;
 	int limit = O_DIM - 1;
 	indexMap.clear(); // clear our map and get ready to init water
@@ -345,9 +348,6 @@ void Occulus::drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<ve
 			p3.y = seaLevel;
 			p4.y = seaLevel;
 
-			vec3 n1 = calcNormal(p1, p3, p2);
-			vec3 n2 = calcNormal(p4, p2, p3);
-
 			// calculate the UV values for each point
 			float xfac = j*1.0;
 			float yfac = i*1.0;
@@ -365,15 +365,11 @@ void Occulus::drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<ve
 
 				// set properties for p1
 				f1.x = idx;
-				normals[idx].x += n1.x;
-				normals[idx].y += n1.y;
-				normals[idx].z += n1.z;
 			}
 			else {
 				// add properties to p1 to arrays and then increment our index
 				f1.x = indNum;
 				vertices.push_back(vec4(p1, 1.0));
-				normals.push_back(vec4(n1, 1.0));
 				uvs.push_back(p1Uv);
 				indexMap.insert({ ind1, indNum });
 				indNum++;
@@ -388,29 +384,19 @@ void Occulus::drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<ve
 
 				// set properties for p2
 				f1.y = idx;
-				normals[idx].x += n1.x;
-				normals[idx].y += n1.y;
-				normals[idx].z += n1.z;
 
 				// set properties for p6
 				f2.z = idx;
-				normals[idx].x += n2.x;
-				normals[idx].y += n2.y;
-				normals[idx].z += n2.z;
 			}
 			else {
 				// add properties to p2 to arrays
 				f1.y = indNum;
 				vertices.push_back(vec4(p2, 1.0));
-				normals.push_back(vec4(n1, 1.0));
 				uvs.push_back(p2Uv);
 
 
 				// add properties for p6 to arrays
 				f2.z = indNum;
-				normals[indNum].x += n2.x;
-				normals[indNum].y += n2.y;
-				normals[indNum].z += n2.z;
 
 				// add index to map and increment index
 				indexMap.insert({ ind2, indNum });
@@ -426,28 +412,18 @@ void Occulus::drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<ve
 
 				// set properties for p3
 				f1.z = idx;
-				normals[idx].x += n1.x;
-				normals[idx].y += n1.y;
-				normals[idx].z += n1.z;
 
 				// set properties for p4
 				f2.x = idx;
-				normals[idx].x += n2.x;
-				normals[idx].y += n2.y;
-				normals[idx].z += n2.z;
 			}
 			else {
 				// add properties to p3 to arrays
 				f1.z = indNum;
 				vertices.push_back(vec4(p3, 1.0));
-				normals.push_back(vec4(n1, 1.0));
 				uvs.push_back(p3Uv);
 
 				// add properties for p6 to arrays
 				f2.z = indNum;
-				normals[indNum].x += n2.x;
-				normals[indNum].y += n2.y;
-				normals[indNum].z += n2.z;
 
 				// increment index
 				indexMap.insert({ ind3, indNum });
@@ -463,15 +439,11 @@ void Occulus::drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<ve
 
 				// set properties for p1
 				f2.y = idx;
-				normals[idx].x += n2.x;
-				normals[idx].y += n2.y;
-				normals[idx].z += n2.z;
 			}
 			else {
 				// add properties to p1 to arrays and then increment our index
 				f2.y = indNum;
 				vertices.push_back(vec4(p4, 1.0));
-				normals.push_back(vec4(n2, 1.0));
 				uvs.push_back(p4Uv);
 				indexMap.insert({ ind4, indNum });
 				indNum++;
@@ -479,18 +451,11 @@ void Occulus::drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<ve
 
 			// push our faces
 			faces.push_back(f1);
+			int temp = f2.x;
+			f2.x = f2.y;
+			f2.y = temp;
 			faces.push_back(f2);
 		}
-	}
-
-	// normalize vectors to accomplish smooth shading
-	int normSize = normals.size();
-	for (int i = 0; i < normSize; i++) {
-		vec3 n = vec3(normals[i].x, normals[i].y, normals[i].z);
-		n = glm::normalize(n);
-		normals[i].x = n.x;
-		normals[i].y = n.y;
-		normals[i].z = n.z;
 	}
 }
 

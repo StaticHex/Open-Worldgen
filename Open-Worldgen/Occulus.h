@@ -1,6 +1,6 @@
 #pragma once
 #define C_DIM 16
-#define O_NUM 15
+#define O_NUM 12
 #define O_DIM C_DIM * O_NUM
 #define O_MIN -(O_DIM / 2)
 #define O_MAX (O_DIM / 2)
@@ -27,7 +27,7 @@ public:
 	Occulus(vec3 pos);
 	void draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
 		vector<float> &temps, vector<float> &heights, vector<uvec3> &faces);
-	void drawWater(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs, vector<uvec3>&faces);
+	void drawWater(vector<vec4> &vertices, vector<vec2> &uvs, vector<uvec3>&faces);
 	void update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<float> &temps);
 private:
 	float spacing;

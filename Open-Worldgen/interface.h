@@ -9,6 +9,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <math.h>
+#include <thread>
 
 // OpenGL library includes
 #include <Windows.h>
@@ -20,6 +21,11 @@
 #include "Occulus.h"
 #include "Camera.h"
 #include "debuggl.h"
+
+// GUI Libraries
+#include <FL/Fl.H>
+#include <FL/Fl_Window.H>
+#include <FL/Fl_Box.H>
 
 using glm::vec4;
 using glm::vec3;
@@ -52,10 +58,19 @@ const char* winTitle = "Open Worldgen v1.0";
 // Window Variables
 int winWidth = 800;
 int winHeight = 800;
+int centerX = 0;
+int centerY = 0;
 bool isGlobal = true;
 int currentButton;
 bool mousePressed;
 float aspect = 0.0f;
+
+// UI Variables
+int fps = 0;
+bool running = true; // used for threading UI updates
+Fl_Window *main_window = new Fl_Window(120, 400);
+Fl_Box *box = new Fl_Box(20, 40, 80, 40, "###");
+Fl_Box *lbl_fps = new Fl_Box(20, 0, 80, 40, "FPS");
 
 // Mouse position vectors
 vec2 cPos = vec2(0, 0);
@@ -73,7 +88,6 @@ vector<vec2> tUv;
 
 // Water Shader Variables
 vector<vec4> wVertices;
-vector<vec4> wNormals;
 vector<uvec3> wFaces;
 vector<vec2> wUV;
 
@@ -85,7 +99,7 @@ vec4 min_bounds = vec4(-(numeric_limits<float>::max)());
 vec4 max_bounds = vec4((numeric_limits<float>::max)());
 
 // Universal shader constants
-vec4 lightPos = vec4(10.0f, 100.0f, 0.0f, 1.0f);
+vec4 lightPos = vec4(0.0f, 10000.0f, 0.0f, 1.0f);
 const float ambConstant = 0.10f;
 
 // Terrain Shader constants
@@ -95,8 +109,9 @@ const float tShininess = 0.01f;
 
 // Water Shader constants
 const vec4 wAmbient = vec4(1.0f, 1.0f, 0.875f, 1.0f);
-const vec4 wSpecular = vec4(0.01f, 0.01f, 0.01f, 1.0f);
-const float wShininess = 0.01f;
+const vec4 wSpecular = vec4(0.5f, 1.0f, 1.0f, 1.0f);
+const float wShininess = 10.0f;
+int wTime = 0;
 
 // VBO and VAO descriptors
 enum { kVertexBuffer, kNormalBuffer, kTempBuffer, kHeightBuffer, kUVBuffer, kIndexBuffer, kNumVbos };

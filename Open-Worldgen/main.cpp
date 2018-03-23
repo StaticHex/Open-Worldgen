@@ -139,6 +139,7 @@ uniform mat4 view;
 uniform mat4 projection;
 uniform vec4 lPos;
 uniform vec4 cPos;
+uniform int time;
 out vec4 lDir;
 out vec4 cDir;
 out vec4 normal;
@@ -146,24 +147,65 @@ out vec2 UV;
 out vec4 diffuse;
 out vec4 wPos;
 
+vec4 calcNorm(vec4 p1, vec4 p2, vec4 p3) {
+	vec3 pp1 = p1.xyz;
+	vec3 pp2 = p2.xyz;
+	vec3 pp3 = p3.xyz;
+	vec3 U = normalize(pp2 - pp1);
+	vec3 V = normalize(pp3 - pp1);
+	return vec4(cross(U, V), 1.0);
+}
+
+float calcP(float t, float p) {
+	return t * 2.0 * 3.14159 / p;
+}
+
+float calcY(float xPos, float zPos, float t) {
+	return 0.05*cos(4.0*sin(cos(sin(xPos + t) + zPos + t) + xPos + t) + 4.0*cos(sin(cos(zPos + t) + xPos + t) + zPos + t));
+}
+
 void main()
 {
+	float spacing = 0.25 * 2.0;
+	float t = calcP(time, 60.0);
+
+	// create some virtual vertices
+	vec4 v_p1 = vec4(vPos.x, calcY(vPos.x, vPos.z + spacing, t), vPos.z + spacing, 1.0);
+	vec4 v_p2 = vec4(vPos.x + spacing, calcY(vPos.x + spacing, vPos.z + spacing, t), vPos.z + spacing, 1.0);
+	vec4 v_p3 = vec4(vPos.x + spacing, calcY(vPos.x + spacing, vPos.z, t), vPos.z, 1.0);
+	vec4 v_p4 = vec4(vPos.x, calcY(vPos.x, vPos.z - spacing, t), vPos.z - spacing, 1.0);
+	vec4 v_p5 = vec4(vPos.x - spacing, calcY(vPos.x - spacing, vPos.z - spacing, t), vPos.z - spacing, 1.0);
+	vec4 v_p6 = vec4(vPos.x - spacing, calcY(vPos.x - spacing, vPos.z, t), vPos.z, 1.0);
+
+	// create some virtual face normals 
+	vec4 v_n1 = calcNorm(v_p6, vPos, v_p1);
+	vec4 v_n2 = calcNorm(v_p1, v_p2, vPos);
+	vec4 v_n3 = calcNorm(vPos, v_p3, v_p2);
+	vec4 v_n4 = calcNorm(vPos, v_p3, v_p4);
+	vec4 v_n5 = calcNorm(v_p5, v_p4, vPos);
+	vec4 v_n6 = calcNorm(v_p6, vPos, v_p5);
+
+	// average virtual normals together for smooth shading effect
+	vec3 v_sn = normalize(v_n1.xyz + v_n2.xyz + v_n3.xyz + v_n4.xyz + v_n5.xyz + v_n6.xyz);
+
     // Transform vertex into clipping coordinates
 	wPos = vec4(cPos.x + vPos.x, vPos.y, cPos.z + vPos.z, 1.0);
+	wPos.y = calcY(wPos.x, wPos.z, t);
 	gl_Position = projection * view * wPos;
 	cDir = vec4(normalize(cPos.xyz - wPos.xyz), 1.0);
+	wPos = gl_Position;
 
     // Compute light direction and transform to camera coordinates
     lDir = vec4(normalize(lPos.xyz), 1.0);
 
     // pass normal to fragment shader
-    normal = vNorm;
+	normal = vec4(v_sn, 1.0);
 
 	// pass UV to fragment shader
 	UV = vUV;
 
     // Set diffuse color to be blue
-	diffuse = vec4(0.0, 0.0, 1.0, 1.0);
+	diffuse = vec4(0.0, 0.0, 0.5, 1.0);
 }
 )zzz";
 
@@ -174,10 +216,12 @@ in vec4 lDir;
 in vec4 cDir;
 in vec2 UV;
 in vec4 diffuse;
+in vec4 wPos;
 uniform float ambConst;
 uniform vec4 ambient;
 uniform vec4 specular;
 uniform float shininess;
+uniform int time;
 uniform sampler2D texMap;
 out vec4 fCol;
 
@@ -187,7 +231,7 @@ void main()
 	vec3 L = normalize(lDir.xyz);
 	vec3 C = normalize(cDir.xyz);
 	vec4 waterTex = texture2D(texMap, UV);
-	vec4 tex = 0.75*waterTex + 0.25*diffuse;
+	vec4 tex = 0.3*waterTex + 0.7*diffuse;
 
 	// calculate ambient component
 	vec3 amb = ambConst * ambient.xyz + diffuse.xyz * (ambConst / 2.0);
@@ -202,7 +246,7 @@ void main()
          spec = clamp(spec, 0.0, 1.0);
 
 	// combine components and set fully opaque
-	fCol = vec4(diff + amb + spec, 0.75);
+	fCol = vec4(diff + amb + spec, 0.45);
 }
 )zzz";
 
@@ -213,9 +257,7 @@ void ErrorCallback(int error, const char* description)
 	std::cerr << "GLFW Error: " << description << "\n";
 }
 
-int main(int argc, char* argv[])
-{
-
+void run_opengl() {
 	if (!glfwInit()) exit(EXIT_FAILURE);
 	glfwSetErrorCallback(ErrorCallback);
 
@@ -225,17 +267,23 @@ int main(int argc, char* argv[])
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	GLFWwindow* window = glfwCreateWindow(winWidth, winHeight,
+	const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+	centerX = mode->width / 2.0;
+	centerY = mode->height / 2.0;
+	GLFWwindow* gl_window = glfwCreateWindow(winWidth, winHeight,
 		&winTitle[0], nullptr, nullptr);
-	CHECK_SUCCESS(window != nullptr);
-	glfwMakeContextCurrent(window);
+	
+	glfwSetWindowPos(gl_window, centerX - winWidth / 2.0, centerY - winHeight / 2.0);
+
+	CHECK_SUCCESS(gl_window != nullptr);
+	glfwMakeContextCurrent(gl_window);
 	glewExperimental = GL_TRUE;
 
 	CHECK_SUCCESS(glewInit() == GLEW_OK);
 	glGetError();  // clear GLEW's error for it
-	glfwSetKeyCallback(window, KeyCallback);
-	glfwSetCursorPosCallback(window, MousePosCallback);
-	glfwSetMouseButtonCallback(window, MouseButtonCallback);
+	glfwSetKeyCallback(gl_window, KeyCallback);
+	glfwSetCursorPosCallback(gl_window, MousePosCallback);
+	glfwSetMouseButtonCallback(gl_window, MouseButtonCallback);
 	glfwSwapInterval(1);
 	const GLubyte* renderer = glGetString(GL_RENDERER);  // get renderer string
 	const GLubyte* version = glGetString(GL_VERSION);    // version as a string
@@ -304,8 +352,8 @@ int main(int argc, char* argv[])
 	height = *(int*)&(header[0x16]);
 	int subImgSize = (width / 4)*(height / 2) * 3; // the size of an individual texture in the atlas
 
-	// This is here to ensure image is set up correctly (in case header information 
-	// is missing or corrupted and was not caught by debug statements)
+												   // This is here to ensure image is set up correctly (in case header information 
+												   // is missing or corrupted and was not caught by debug statements)
 	if (imageSize == 0) {
 		imageSize = width*height * 3;
 	}
@@ -346,7 +394,7 @@ int main(int argc, char* argv[])
 			dirtData[count] = data[i*width * 3 + j];
 			snowData[count] = data[i*width * 3 + j + subW];
 			gravelData[count] = data[i*width * 3 + j + subW * 2];
-			waterData[count] = data[i*width*3 + j +  + subW * 3];
+			waterData[count] = data[i*width * 3 + j + +subW * 3];
 			grassData[count] = data[i*width * 3 + j + subImgSize * 4];
 			iceData[count] = data[i*width * 3 + j + subImgSize * 4 + subW];
 			rockData[count] = data[i*width * 3 + j + subImgSize * 4 + subW * 2];
@@ -384,7 +432,7 @@ int main(int argc, char* argv[])
 	glGenTextures(1, &waterTex);
 	glActiveTexture(GL_TEXTURE3);
 	glBindTexture(GL_TEXTURE_2D, waterTex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width/4, height/2, 0, GL_BGR, GL_UNSIGNED_BYTE, waterData);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width / 4, height / 2, 0, GL_BGR, GL_UNSIGNED_BYTE, waterData);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -429,20 +477,20 @@ int main(int argc, char* argv[])
 	// Init map data
 	Occulus single = Occulus(camera.getEye());
 	single.draw(tVertices, tNormals, tUv, tTemps, tHeights, tFaces);
-	single.drawWater(wVertices, wNormals, wUV, wFaces);
-	
+	single.drawWater(wVertices, wUV, wFaces);
 
-	/* 
+
+	/*
 	================================================================================
 	== Begin Setup for Terrain Shaders                                            ==
 	================================================================================
 	*/
 	// Setup our VAO array.
 	CHECK_GL_ERROR(glGenVertexArrays(kNumVaos, &gArrayObjects[0]));
-	
+
 	// Switch to the VAO for Geometry.
 	CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kGeometryVao]));
-	
+
 	// Generate buffer objects
 	CHECK_GL_ERROR(glGenBuffers(kNumVbos, &gBufferObjects[kGeometryVao][0]));
 
@@ -469,7 +517,7 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
 		sizeof(float) * tTemps.size(), nullptr,
 		GL_STATIC_DRAW));
-	
+
 	CHECK_GL_ERROR(glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 0, 0));
 	CHECK_GL_ERROR(glEnableVertexAttribArray(2));
 
@@ -496,11 +544,11 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
 		sizeof(uint32_t) * tFaces.size() * 3,
 		&tFaces[0], GL_STATIC_DRAW));
-	
+
 	// Setup vertex shader.
 	GLuint tVertexShader = 0;
 	const char* tVertexShaderSrcPtr = tVertexShaderSrc;
-	
+
 	CHECK_GL_ERROR(tVertexShader = glCreateShader(GL_VERTEX_SHADER));
 	CHECK_GL_ERROR(glShaderSource(tVertexShader, 1, &tVertexShaderSrcPtr, nullptr));
 	glCompileShader(tVertexShader);
@@ -608,21 +656,12 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
 	CHECK_GL_ERROR(glEnableVertexAttribArray(0));
 
-
-	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kWaterVao][kNormalBuffer]));
-	// NOTE: We do not send anything right now, we just describe it to OpenGL.
-	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-		sizeof(float) * wNormals.size() * 4, nullptr,
-		GL_STATIC_DRAW));
-	CHECK_GL_ERROR(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0));
-	CHECK_GL_ERROR(glEnableVertexAttribArray(1));
-
 	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kWaterVao][kUVBuffer]));
 	// NOTE: We do not send anything right now, we just describe it to OpenGL.
 	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
 		sizeof(float) * wUV.size() * 2, nullptr,
 		GL_STATIC_DRAW));
-	CHECK_GL_ERROR(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0));
+	CHECK_GL_ERROR(glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, 0));
 	CHECK_GL_ERROR(glEnableVertexAttribArray(2));
 
 	// Setup element array buffer.
@@ -658,15 +697,9 @@ int main(int argc, char* argv[])
 	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
 		sizeof(float) * wVertices.size() * 4, nullptr,
 		GL_STATIC_DRAW));
-	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, gBufferObjects[kWaterVao][kNormalBuffer]));
-	// NOTE: We do not send anything right now, we just describe it to OpenGL.
-	CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-		sizeof(float) * wNormals.size() * 4, nullptr,
-		GL_STATIC_DRAW));
 	// Bind attributes.
 	CHECK_GL_ERROR(glBindAttribLocation(wProgram, 0, "vPos"));
-	CHECK_GL_ERROR(glBindAttribLocation(wProgram, 1, "vNorm"));
-	CHECK_GL_ERROR(glBindAttribLocation(wProgram, 2, "vUV"));
+	CHECK_GL_ERROR(glBindAttribLocation(wProgram, 1, "vUV"));
 	CHECK_GL_ERROR(glBindFragDataLocation(wProgram, 0, "fCol"));
 	glLinkProgram(wProgram);
 	CHECK_GL_PROGRAM_ERROR(wProgram);
@@ -696,6 +729,9 @@ int main(int argc, char* argv[])
 	GLint shinyLocW = 0;
 	CHECK_GL_ERROR(shinyLocW =
 		glGetUniformLocation(wProgram, "shininess"));
+	GLint timeLocW = 0;
+	CHECK_GL_ERROR(timeLocW =
+		glGetUniformLocation(wProgram, "time"));
 	GLint texLocW = 0;
 	CHECK_GL_ERROR(texLocW =
 		glGetUniformLocation(wProgram, "texMap"));
@@ -713,11 +749,10 @@ int main(int argc, char* argv[])
 	tUv.clear();
 	tHeights.clear();
 	wVertices.clear();
-	wNormals.clear();
 	wUV.clear();
 	wFaces.clear();
 	single.draw(tVertices, tNormals, tUv, tTemps, tHeights, tFaces);
-	single.drawWater(wVertices, wNormals, wUV, wFaces);
+	single.drawWater(wVertices, wUV, wFaces);
 
 	// Send vertices to the GPU. (Do outside loop for efficiency)
 	CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
@@ -744,9 +779,10 @@ int main(int argc, char* argv[])
 		sizeof(float) * wUV.size() * 2,
 		&wUV[0], GL_STATIC_DRAW));
 
-	while (!glfwWindowShouldClose(window)) {
+	while (!glfwWindowShouldClose(gl_window)) {
+		fps += 1;
 		// Setup some basic window stuff.
-		glfwGetFramebufferSize(window, &winWidth, &winHeight);
+		glfwGetFramebufferSize(gl_window, &winWidth, &winHeight);
 		glViewport(0, 0, winWidth, winHeight);
 		glClearColor(0.0f, 0.8f, 1.0f, 0.0f);
 		glEnable(GL_DEPTH_TEST);
@@ -755,7 +791,9 @@ int main(int argc, char* argv[])
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glEnable(GL_BLEND);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
+		glFrontFace(GL_CW);
 		// Switch to the Geometry VAO.
 		CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kGeometryVao]));
 
@@ -769,6 +807,12 @@ int main(int argc, char* argv[])
 
 		// Compute the view matrix
 		mat4 view_matrix = camera.getViewMatrix();
+
+		// Increment water time
+		wTime += 1;
+		if (wTime > 60) {
+			wTime = 0;
+		}
 
 		// Send normals, temps, and heights to the GPU for terrain generator
 		CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
@@ -817,13 +861,6 @@ int main(int argc, char* argv[])
 		// Switch to the Water VAO.
 		CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kWaterVao]));
 
-		// Send normals for water shader to GPU here (may remove later)
-		CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER,
-			gBufferObjects[kWaterVao][kNormalBuffer]));
-		CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-			sizeof(float) * wNormals.size() * 4,
-			&wNormals[0], GL_STATIC_DRAW));
-
 		// Use our program.
 		CHECK_GL_ERROR(glUseProgram(wProgram));
 
@@ -838,17 +875,52 @@ int main(int argc, char* argv[])
 		CHECK_GL_ERROR(glUniform1f(ambCLocW, ambConstant));
 		CHECK_GL_ERROR(glUniform4fv(specLocW, 1, &wSpecular[0]));
 		CHECK_GL_ERROR(glUniform1f(shinyLocW, wShininess));
+		CHECK_GL_ERROR(glUniform1i(timeLocW, wTime));
 		CHECK_GL_ERROR(glUniform1i(texLocW, 3));
-		
+
 		CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, wFaces.size() * 3, GL_UNSIGNED_INT, 0));
 		// END OF WATER SHADER STUFF
 
 		// Poll and swap.
 		glfwPollEvents();
-		glfwSwapBuffers(window);
+		glfwSwapBuffers(gl_window);
 	}
-
-	glfwDestroyWindow(window);
+	running = false;
+	glfwDestroyWindow(gl_window);
 	glfwTerminate();
 	exit(EXIT_SUCCESS);
+}
+
+void fps_calc() {
+	int t = time(0);
+	cout << "Before Loop" << endl;
+	while (running) {
+		if (time(0) > t) {
+			t = time(0);
+			box->label(std::to_string(fps).c_str());
+			Fl::flush();
+			fps = 0;
+		}
+	}
+}
+
+int main(int argc, char* argv[])
+{
+	std::thread gl_thread(run_opengl);
+	std::thread fps_thread(fps_calc);
+	//gl_thread.join();
+	lbl_fps->box(FL_NO_BOX);
+	lbl_fps->labelsize(20);
+	lbl_fps->labelfont(FL_HELVETICA + FL_BOLD);
+	lbl_fps->labeltype(FL_SHADOW_LABEL);
+
+	box->box(FL_UP_BOX);
+	box->labelsize(20);
+	box->labelfont(FL_HELVETICA);
+
+	main_window->set_modal();
+	main_window->end();
+	main_window->show(argc, argv);
+	return Fl::run();
+	return 0;
 }
