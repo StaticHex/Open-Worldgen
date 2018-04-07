@@ -161,7 +161,13 @@ float calcP(float t, float p) {
 }
 
 float calcY(float xPos, float zPos, float t) {
-	return 0.05*cos(4.0*sin(cos(sin(xPos + t) + zPos + t) + xPos + t) + 4.0*cos(sin(cos(zPos + t) + xPos + t) + zPos + t));
+	float oSFac = 0.0167;
+	float smSFac = 0.5;
+	float lgSFac = 2.0;
+	float wave = oSFac*cos(lgSFac*sin(smSFac*cos(sin(xPos + t) + zPos - t) + xPos + t) + smSFac*cos(lgSFac*sin(cos(zPos + t) + xPos - t) + zPos + t));
+		  wave += oSFac*cos(lgSFac*sin(smSFac*cos(sin(xPos - t) + zPos + t) + xPos + t) + smSFac*cos(lgSFac*sin(cos(zPos - t) + xPos + t) + zPos + t));
+		  wave += oSFac*cos(lgSFac*sin(smSFac*cos(sin(xPos - t) + zPos + t) + xPos - t) + smSFac*cos(lgSFac*sin(cos(zPos - t) + xPos + t) + zPos - t));
+	return wave;
 }
 
 void main()

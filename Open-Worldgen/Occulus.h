@@ -1,6 +1,6 @@
 #pragma once
 #define C_DIM 16
-#define O_NUM 12
+#define O_NUM 15
 #define O_DIM C_DIM * O_NUM
 #define O_MIN -(O_DIM / 2)
 #define O_MAX (O_DIM / 2)
