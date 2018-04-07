@@ -903,7 +903,9 @@ void fps_calc() {
 	while (running) {
 		if (time(0) > t) {
 			t = time(0);
-			box->label(std::to_string(fps).c_str());
+			std::string ff = std::to_string(fps);
+
+			box->label(ff.c_str());
 			Fl::flush();
 			fps = 0;
 		}
