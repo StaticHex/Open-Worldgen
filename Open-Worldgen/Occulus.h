@@ -9,12 +9,32 @@
 #define UVY_MIN 0.0
 #define UVY_MAX 0.50
 
-#include "Sector.h"
 #include "OpenSimplex.h"
 #include <map>
+#include <vector>
+#include<glm/glm.hpp>
 #include <iterator>
 
 using glm::cross;
+using std::vector;
+using glm::vec3;
+using glm::vec4;
+using glm::vec2;
+using glm::uvec3;
+using std::tuple;
+using std::get;
+
+struct Sector {
+	vec3 position = vec3(0.0, 0.0, 0.0);
+	float temp;
+	const float size = 0.25;
+	void init(float x, float y, float z) {
+		position = vec3(x, y, z);
+	}
+	void init(vec3 pos) {
+		position = pos;
+	}
+};
 
 class Occulus {
 public:
@@ -33,7 +53,7 @@ private:
 	float spacing;
 	void initMap();
 	void updateMap();
-	void mapNoise(int index);
+	tuple<float, float> mapNoise(int index);
 	vector<vec4> nIndex; // TODO: Delete this once indexed vertices are implemented
 	std::map<int, int> indexMap;
 	struct osn_context *ctx;

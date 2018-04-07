@@ -1,5 +1,6 @@
 #include "Occulus.h"
 using glm::clamp;
+using std::make_tuple;
 
 // Default Constructor
 // @description:
@@ -55,21 +56,22 @@ Occulus::Occulus(vec3 pos) :
 // - Uses open simplex to generate noise values for temperature
 //   and height, multiplies these values, and sets them as the height
 //   and temperature for the sector at the passed index.
-void Occulus::mapNoise(int index) {
+tuple<float, float> Occulus::mapNoise(int index) {
 	vec3 tVec = position + map[index].position;
-	double nx = tVec.x / (O_DIM * 1.0) - 0.5;
-	double nz = tVec.z / (O_DIM * 1.0) - 0.5;
-	double tVal = open_simplex_noise2(ctx, nx, nz);
+	float nx = tVec.x / (O_DIM * 1.0) - 0.5;
+	float nz = tVec.z / (O_DIM * 1.0) - 0.5;
+	float tVal = open_simplex_noise2(ctx, nx, nz);
 	
-	double hVal = 1.0 * open_simplex_noise2(ctx, nx * 10.0, nz * 10.0);
+	float hVal = 1.0 * open_simplex_noise2(ctx, nx * 10.0, nz * 10.0);
 		   hVal+= 0.5 * open_simplex_noise2(ctx, nx * 20.0, nz * 20.0);
 		   hVal+= 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 30.0);
 		   hVal = glm::max(powf(hVal, 2.33334), 0.0f);
 		   hVal -= 0.25 * open_simplex_noise2(ctx, nx * 5.0, nz * 5.0);
 		   hVal*= 20.001;
 		   tVal = clamp(tVal * 100.0 - hVal*2.0, 0.0, 100.0);
-	map[index].position.y = hVal;
-	map[index].temp = tVal;
+		   hVal = static_cast<int>(hVal*100.0) / 100.0;
+		   tVal = static_cast<int>(tVal*100.0) / 100.0;
+		   return make_tuple(hVal, tVal);
 }
 
 // Initialize Map Method
@@ -80,8 +82,12 @@ void Occulus::mapNoise(int index) {
 void Occulus::initMap() {
 	for (int i = O_MIN; i < O_MAX; i++) {
 		for (int j = O_MIN; j < O_MAX; j++) {
-			this->map.push_back(Sector(j*spacing, 0.0f, i*spacing));
-			mapNoise(map.size() - 1);
+			Sector newSec = Sector();
+			newSec.init(j*spacing, 0.0f, i*spacing);
+			this->map.push_back(newSec);
+			tuple<float, float> ht = mapNoise(map.size() - 1);
+			map.back().position.y = get<0>(ht);
+			map.back().temp = get<1>(ht);
 		}
 	}
 }
@@ -94,7 +100,10 @@ void Occulus::updateMap() {
 	if (map.size()) {
 		for (int i = 0; i < O_DIM; i++) {
 			for (int j = 0; j < O_DIM; j++) {
-				mapNoise(i*O_DIM + j);
+				int idx = i*O_DIM + j;
+				tuple<float, float> ht = mapNoise(idx);
+				map[idx].position.y = get<0>(ht);
+				map[idx].temp = get<1>(ht);
 			}
 		}
 	}

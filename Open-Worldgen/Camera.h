@@ -4,7 +4,7 @@
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/transform.hpp>
-#include "Sector.h"
+#include "Occulus.h"
 using glm::mat4;
 using glm::mat3;
 using glm::vec3;
