@@ -10,6 +10,7 @@ Occulus::Occulus() :
 	seaLevel(-0.1)
 {
 	position = vec3(0.0f, 0.0f, 0.0f);
+	lPosition = position;
 	size = spacing * O_DIM * C_DIM;
 	open_simplex_noise(77374, &ctx);
 	initMap();
@@ -29,6 +30,7 @@ Occulus::Occulus(float x, float y, float z) :
 	seaLevel(-0.1)
 {
 	size = spacing * O_DIM * C_DIM;
+	lPosition = position;
 	open_simplex_noise(77374, &ctx);
 	initMap();
 }
@@ -45,6 +47,7 @@ Occulus::Occulus(vec3 pos) :
 	seaLevel(-0.1)
 {
 	size = spacing * O_DIM;
+	lPosition = position;
 	open_simplex_noise(77374, &ctx);
 	initMap();
 }
@@ -61,17 +64,17 @@ tuple<float, float> Occulus::mapNoise(int index) {
 	float nx = tVec.x / (O_DIM * 1.0) - 0.5;
 	float nz = tVec.z / (O_DIM * 1.0) - 0.5;
 	float tVal = open_simplex_noise2(ctx, nx, nz);
-	
+
 	float hVal = 1.0 * open_simplex_noise2(ctx, nx * 10.0, nz * 10.0);
-		   hVal+= 0.5 * open_simplex_noise2(ctx, nx * 20.0, nz * 20.0);
-		   hVal+= 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 30.0);
-		   hVal = glm::max(powf(hVal, 2.33334), 0.0f);
-		   hVal -= 0.25 * open_simplex_noise2(ctx, nx * 5.0, nz * 5.0);
-		   hVal*= 20.001;
-		   tVal = clamp(tVal * 100.0 - hVal*2.0, 0.0, 100.0);
-		   hVal = static_cast<int>(hVal*100.0) / 100.0;
-		   tVal = static_cast<int>(tVal*100.0) / 100.0;
-		   return make_tuple(hVal, tVal);
+	hVal += 0.5 * open_simplex_noise2(ctx, nx * 20.0, nz * 20.0);
+	hVal += 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 30.0);
+	hVal = glm::max(powf(hVal, 2.33334), 0.0f);
+	hVal -= 0.25 * open_simplex_noise2(ctx, nx * 5.0, nz * 5.0);
+	hVal *= 20.001;
+	tVal = clamp(tVal * 100.0 - hVal*2.0, 0.0, 100.0);
+	hVal = static_cast<int>(hVal*100.0) / 100.0;
+	tVal = static_cast<int>(tVal*100.0) / 100.0;
+	return make_tuple(hVal, tVal);
 }
 
 // Initialize Map Method
@@ -97,13 +100,17 @@ void Occulus::initMap() {
 // - Updates noise-based parameters for each sector when the update function 
 //   is called.
 void Occulus::updateMap() {
-	if (map.size()) {
-		for (int i = 0; i < O_DIM; i++) {
-			for (int j = 0; j < O_DIM; j++) {
-				int idx = i*O_DIM + j;
-				tuple<float, float> ht = mapNoise(idx);
-				map[idx].position.y = get<0>(ht);
-				map[idx].temp = get<1>(ht);
+	vec3 dV = lPosition - position;
+	lPosition = position;
+	if (dV.x != 0.0 || dV.z != 0.0) {
+		if (map.size()) {
+			for (int i = 0; i < O_DIM; i++) {
+				for (int j = 0; j < O_DIM; j++) {
+					int idx = i*O_DIM + j;
+					tuple<float, float> ht = mapNoise(idx);
+					map[idx].position.y = get<0>(ht);
+					map[idx].temp = get<1>(ht);
+				}
 			}
 		}
 	}
@@ -118,11 +125,11 @@ void Occulus::updateMap() {
 // @description
 // - Updates the position of the view area, calls the updateMap() method ot update the height map
 //   and temperature map, and then calls the draw and smooth shading functions.
-void Occulus::update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<float> &temps) {
+void Occulus::update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<float> &temps, vector<uvec3> &faces) {
 	position.x = pos.x;
 	position.z = pos.z;
 	updateMap();
-	draw(normals, temps, heights);
+	draw(normals, temps, heights, faces);
 }
 
 // Draw Method (Public)
@@ -142,6 +149,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 	vector<float> &temps, vector<float> &heights, vector<uvec3> &faces) {
 	int indNum = 0;
 	int limit = O_DIM - 1;
+	std::map<int, int> indexMap;
 	indexMap.clear(); // clear our map and get ready to init water
 
 	std::map<int, int>::iterator it; // create an iterator to check for existence of keys in map
@@ -191,6 +199,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 				// add properties to p1 to arrays and then increment our index
 				f1.x = indNum;
 				vertices.push_back(vec4(p1, 1.0));
+				indexes.push_back(ind1);
 				normals.push_back(vec4(n1, 1.0));
 				uvs.push_back(p1Uv);
 				temps.push_back(map[ind1].temp);
@@ -222,6 +231,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 				// add properties to p2 to arrays
 				f1.y = indNum;
 				vertices.push_back(vec4(p2, 1.0));
+				indexes.push_back(ind2);
 				normals.push_back(vec4(n1, 1.0));
 				temps.push_back(map[ind2].temp);
 				heights.push_back(map[ind2].position.y);
@@ -262,6 +272,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 				// add properties to p3 to arrays
 				f1.z = indNum;
 				vertices.push_back(vec4(p3, 1.0));
+				indexes.push_back(ind3);
 				normals.push_back(vec4(n1, 1.0));
 				temps.push_back(map[ind3].temp);
 				heights.push_back(map[ind3].position.y);
@@ -295,6 +306,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 				// add properties to p1 to arrays and then increment our index
 				f2.y = indNum;
 				vertices.push_back(vec4(p4, 1.0));
+				indexes.push_back(ind4);
 				normals.push_back(vec4(n2, 1.0));
 				uvs.push_back(p4Uv);
 				temps.push_back(map[ind4].temp);
@@ -332,7 +344,7 @@ void Occulus::draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &
 void Occulus::drawWater(vector<vec4> &vertices, vector<vec2> &uvs, vector<uvec3>&faces) {
 	int indNum = 0;
 	int limit = O_DIM - 1;
-	indexMap.clear(); // clear our map and get ready to init water
+	std::map<int, int> indexMap;
 	std::map<int, int>::iterator it; // create an iterator to check for existence of keys in map
 
 	for (int i = 0; i < limit; i++) {
@@ -473,10 +485,12 @@ void Occulus::drawWater(vector<vec4> &vertices, vector<vec2> &uvs, vector<uvec3>
 // - normals: The location of the normal map for the view area
 // - temps: The location of the temp map for the view area
 // - heights: The location of the height map for the view area
+// - faces: used to update normals, temps, and heights. 
 // @description
-// - This is the method called by the update function; only udpateds globale
-//   vector maps which have the potential to change between frames
-void Occulus::draw(vector<vec4> &normals, vector<float> &temps, vector<float> &heights) {
+// - This is the method called by the update function; only updates global
+//   vector maps which have the potential to change between frames. Uses the faces
+//   map to help calculate the vertex normals for each point
+void Occulus::draw(vector<vec4> &normals, vector<float> &temps, vector<float> &heights, vector<uvec3> &faces) {
 	int indNum = 0;
 	int limit = O_DIM - 1;
 	int normSize = normals.size();
@@ -488,89 +502,38 @@ void Occulus::draw(vector<vec4> &normals, vector<float> &temps, vector<float> &h
 		heights[i] = 0.0;
 	}
 
-	// Update normals, temps, and heights
-	for (int i = 0; i < limit; i++) {
-		for (int j = 0; j < limit; j++) {
-			// get index positions from global grid
-			float ind1 = i*O_DIM + j;
-			float ind2 = i*O_DIM + (j + 1);
-			float ind3 = (i + 1)*O_DIM + j;
-			float ind4 = (i + 1)*O_DIM + (j + 1);
+	for (int i = 0; i < faces.size(); i++) {
 
-			vec3 p1 = map[ind1].position;
-			vec3 p2 = map[ind2].position;
-			vec3 p3 = map[ind3].position;
-			vec3 p4 = map[ind4].position;
+		// indicies mapping into our vectors
+		int i1 = faces[i].x;
+		int i2 = faces[i].y;
+		int i3 = faces[i].z;
 
-			vec3 n1 = calcNormal(p1, p3, p2);
-			vec3 n2 = calcNormal(p4, p2, p3);
+		// indicies mapping into our grid
+		int ind1 = indexes[i1];
+		int ind2 = indexes[i2];
+		int ind3 = indexes[i3];
 
-			// calculate the UV values for each point
-			float xfac = j*1.0;
-			float yfac = i*1.0;
-			vec2 p1Uv = vec2(UVX_MIN + xfac, UVY_MIN + yfac);
-			vec2 p2Uv = vec2(UVX_MAX + xfac, UVY_MIN + yfac);
-			vec2 p3Uv = vec2(UVX_MIN + xfac, UVY_MAX + yfac);
-			vec2 p4Uv = vec2(UVX_MAX + xfac, UVY_MAX + yfac);
+		// get our points
+		vec3 p1 = map[ind1].position;
+		vec3 p2 = map[ind2].position;
+		vec3 p3 = map[ind3].position;
 
-			// Update point for ind1
-			if (indexMap[ind1] == indNum)
-			{
-				// set properties for p1
-				normals[indNum].x += n1.x;
-				normals[indNum].y += n1.y;
-				normals[indNum].z += n1.z;
-				temps[indNum] = map[ind1].temp;
-				heights[indNum] = map[ind1].position.y;
-				indNum++;
-			}
+		// do a normal calculation
+		vec3 n1 = calcNormal(p1, p3, p2);
 
-			// Update point for ind2
-			if (indexMap[ind2] == indNum)
-			{
-				// set properties for p2
-				normals[indNum].x += n1.x;
-				normals[indNum].y += n1.y;
-				normals[indNum].z += n1.z;
-				temps[indNum] = map[ind2].temp;
-				heights[indNum] = map[ind2].position.y;
+		//update our normal array by adding the face normal
+		normals[i1] += vec4(n1, 1.0);
+		normals[i2] += vec4(n1, 1.0);
+		normals[i3] += vec4(n1, 1.0);
 
-				// set properties for p6
-				normals[indNum].x += n2.x;
-				normals[indNum].y += n2.y;
-				normals[indNum].z += n2.z;
-				indNum++;
-			}
-
-			// Check for the existence of ind3 in our map
-			if (indexMap[ind3] == indNum)
-			{
-				// set properties for p3
-				normals[indNum].x += n1.x;
-				normals[indNum].y += n1.y;
-				normals[indNum].z += n1.z;
-				temps[indNum] = map[ind3].temp;
-				heights[indNum] = map[ind3].position.y;
-
-				// set properties for p4
-				normals[indNum].x += n2.x;
-				normals[indNum].y += n2.y;
-				normals[indNum].z += n2.z;
-				indNum++;
-			}
-
-			// Check for existence of ind4 in our map
-			if (indexMap[ind4] == indNum)
-			{
-				// set properties for p1
-				normals[indNum].x += n2.x;
-				normals[indNum].y += n2.y;
-				normals[indNum].z += n2.z;
-				temps[indNum] = map[ind4].temp;
-				heights[indNum] = map[ind4].position.y;
-				indNum++;
-			}
-		}
+		// update temperature and height map
+		temps[i1] = map[ind1].temp;
+		temps[i2] = map[ind2].temp;
+		temps[i3] = map[ind3].temp;
+		heights[i1] = map[ind1].position.y;
+		heights[i2] = map[ind2].position.y;
+		heights[i3] = map[ind3].position.y;
 	}
 
 	// normalize vectors to accomplish smooth shading
@@ -597,4 +560,3 @@ vec4 Occulus::calcNormal(vec3 p1, vec3 p2, vec3 p3) {
 	vec3 V = normalize(p3 - p1);
 	return vec4(cross(U, V), 1.0f);
 }
-

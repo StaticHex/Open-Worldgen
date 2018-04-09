@@ -803,7 +803,7 @@ void run_opengl() {
 		// Switch to the Geometry VAO.
 		CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kGeometryVao]));
 
-		single.update(camera.getEye(), tHeights, tNormals, tTemps);
+		single.update(camera.getEye(), tHeights, tNormals, tTemps, tFaces);
 
 		// Compute the projection matrix.
 		aspect = static_cast<float>(winWidth) / winHeight;

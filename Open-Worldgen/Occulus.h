@@ -48,15 +48,16 @@ public:
 	void draw(vector<vec4> &vertices, vector<vec4> &normals, vector<vec2> &uvs,
 		vector<float> &temps, vector<float> &heights, vector<uvec3> &faces);
 	void drawWater(vector<vec4> &vertices, vector<vec2> &uvs, vector<uvec3>&faces);
-	void update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<float> &temps);
+	void update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<float> &temps, vector<uvec3> &faces);
 private:
 	float spacing;
 	void initMap();
 	void updateMap();
 	tuple<float, float> mapNoise(int index);
 	vector<vec4> nIndex; // TODO: Delete this once indexed vertices are implemented
-	std::map<int, int> indexMap;
+	vector<int> indexes;
 	struct osn_context *ctx;
+	vec3 lPosition;
 	vec4 calcNormal(vec3 p1, vec3 p2, vec3 p3);
-	void draw(vector<vec4> &normals, vector<float> &temps, vector<float> &heights);
+	void draw(vector<vec4> &normals, vector<float> &temps, vector<float> &heights, vector<uvec3> &faces);
 };
