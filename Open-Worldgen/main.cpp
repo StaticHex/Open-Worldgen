@@ -21,6 +21,7 @@ out float fTemp;
 out float fHeight;
 out vec4 diffuse;
 out vec4 wPos;
+out vec4 cDist;
 
 void main()
 {
@@ -33,6 +34,7 @@ void main()
 	wPos = vec4(cPos.x + vPos.x, height, cPos.z + vPos.z, 1.0);
 	gl_Position = projection * view * wPos;
 	cDir = vec4(normalize(cPos.xyz - wPos.xyz), 1.0);
+	cDist = vec4(cPos.xyz - wPos.xyz, 1.0);
 
     // Compute light direction and transform to camera coordinates
     lDir = vec4(normalize(lPos.xyz), 1.0);
@@ -57,6 +59,7 @@ R"zzz(#version 330 core
 in vec4 normal;
 in vec4 lDir;
 in vec4 cDir;
+in vec4 cDist;
 in vec2 UV;
 in float fTemp;
 in float fHeight;
@@ -64,6 +67,8 @@ in vec4 diffuse;
 uniform float ambConst;
 uniform vec4 ambient;
 uniform vec4 specular;
+uniform vec4 sceneCol;
+uniform float fogDist;
 uniform float shininess;
 uniform sampler2D dirtTex;
 uniform sampler2D snowTex;
@@ -124,8 +129,11 @@ void main()
          spec = clamp(spec, 0.0, 1.0);
 
 	// combine components and set fully opaque
-	fCol = vec4(diff + amb + spec, 1.0);
-	//fCol = vec4(UV.x, 0.0, UV.y, 1.0);
+	float sceneFact = pow(length(cDist) / fogDist, 2);
+	vec3 comboCol = (diff+amb+spec) * clamp(1.0 - sceneFact, 0.0, 1.0);
+	vec3 fogCol = sceneCol.xyz * clamp(sceneFact, 0.0, 1.0);
+	fCol = vec4(comboCol + fogCol, 1.0);
+	//fCol = vec4(clamp(fogDist, 0.0, 1.0), 0.0, 0.0, 1.0);
 }
 )zzz";
 
@@ -142,6 +150,7 @@ uniform vec4 cPos;
 uniform int time;
 out vec4 lDir;
 out vec4 cDir;
+out vec4 cDist;
 out vec4 normal;
 out vec2 UV;
 out vec4 diffuse;
@@ -199,6 +208,7 @@ void main()
 	wPos.y = calcY(wPos.x, wPos.z, t);
 	gl_Position = projection * view * wPos;
 	cDir = vec4(normalize(cPos.xyz - wPos.xyz), 1.0);
+	cDist = vec4(cPos.xyz - wPos.xyz, 1.0);
 	wPos = gl_Position;
 
     // Compute light direction and transform to camera coordinates
@@ -211,7 +221,7 @@ void main()
 	UV = vUV;
 
     // Set diffuse color to be blue
-	diffuse = vec4(0.0, 0.0, 0.5, 1.0);
+	diffuse = vec4(0.0, 0.0, 0.3, 1.0);
 }
 )zzz";
 
@@ -220,11 +230,14 @@ R"zzz(#version 330 core
 in vec4 normal;
 in vec4 lDir;
 in vec4 cDir;
+in vec4 cDist;
 in vec2 UV;
 in vec4 diffuse;
 in vec4 wPos;
 uniform float ambConst;
 uniform vec4 ambient;
+uniform vec4 sceneCol;
+uniform float fogDist;
 uniform vec4 specular;
 uniform float shininess;
 uniform int time;
@@ -237,7 +250,7 @@ void main()
 	vec3 L = normalize(lDir.xyz);
 	vec3 C = normalize(cDir.xyz);
 	vec4 waterTex = texture2D(texMap, UV);
-	vec4 tex = 0.3*waterTex + 0.7*diffuse;
+	vec4 tex = 0.5*waterTex + 0.5*diffuse;
 
 	// calculate ambient component
 	vec3 amb = ambConst * ambient.xyz + diffuse.xyz * (ambConst / 2.0);
@@ -251,8 +264,13 @@ void main()
 	vec3 spec = specular.xyz * pow(max(dot(rflct,C),0.0),0.3*shininess);
          spec = clamp(spec, 0.0, 1.0);
 
+	float sceneFact = pow(length(cDist) / fogDist, 2);
+	float waterFact = sqrt(length(cDist)) / 5.0;
+	vec3 comboCol = (diff+amb+spec) * clamp(1.0 - sceneFact, 0.0, 1.0);
+	vec3 fogCol = sceneCol.xyz * clamp(sceneFact, 0.0, 1.0);
+
 	// combine components and set fully opaque
-	fCol = vec4(diff + amb + spec, 0.45);
+	fCol = vec4(comboCol + fogCol, clamp(waterFact, 0.25, 1.0));
 }
 )zzz";
 
@@ -607,6 +625,12 @@ void run_opengl() {
 	GLint cPosLoc = 0;
 	CHECK_GL_ERROR(cPosLoc =
 		glGetUniformLocation(tProgram, "cPos"));
+	GLint sceneColLoc = 0;
+	CHECK_GL_ERROR(sceneColLoc =
+		glGetUniformLocation(tProgram, "sceneCol"));
+	GLint fogDistLoc = 0;
+	CHECK_GL_ERROR(fogDistLoc =
+		glGetUniformLocation(tProgram, "fogDist"));
 	GLint ambCLoc = 0;
 	CHECK_GL_ERROR(ambCLoc =
 		glGetUniformLocation(tProgram, "ambConst"));
@@ -732,6 +756,12 @@ void run_opengl() {
 	GLint specLocW = 0;
 	CHECK_GL_ERROR(specLocW =
 		glGetUniformLocation(wProgram, "specular"));
+	GLint sceneColLocW = 0;
+	CHECK_GL_ERROR(sceneColLocW =
+		glGetUniformLocation(wProgram, "sceneCol"));
+	GLint fogDistLocW = 0;
+	CHECK_GL_ERROR(fogDistLocW =
+		glGetUniformLocation(wProgram, "fogDist"));
 	GLint shinyLocW = 0;
 	CHECK_GL_ERROR(shinyLocW =
 		glGetUniformLocation(wProgram, "shininess"));
@@ -790,7 +820,7 @@ void run_opengl() {
 		// Setup some basic window stuff.
 		glfwGetFramebufferSize(gl_window, &winWidth, &winHeight);
 		glViewport(0, 0, winWidth, winHeight);
-		glClearColor(0.0f, 0.8f, 1.0f, 0.0f);
+		glClearColor(tSceneCol.x, tSceneCol.y, tSceneCol.z, tSceneCol.w);
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_MULTISAMPLE);
 		glDepthFunc(GL_LESS);
@@ -848,6 +878,8 @@ void run_opengl() {
 		CHECK_GL_ERROR(glUniform4fv(lPosLoc, 1, &lightPos[0]));
 		CHECK_GL_ERROR(glUniform4fv(cPosLoc, 1, &camera.getEye()[0]));
 		CHECK_GL_ERROR(glUniform4fv(ambLoc, 1, &tAmbient[0]));
+		CHECK_GL_ERROR(glUniform4fv(sceneColLoc, 1, &tSceneCol[0]));
+		CHECK_GL_ERROR(glUniform1f(fogDistLoc, tFogDist));
 		CHECK_GL_ERROR(glUniform1f(ambCLoc, ambConstant));
 		CHECK_GL_ERROR(glUniform4fv(specLoc, 1, &tSpecular[0]));
 		CHECK_GL_ERROR(glUniform1f(shinyLoc, tShininess));
@@ -879,6 +911,8 @@ void run_opengl() {
 		CHECK_GL_ERROR(glUniform4fv(cPosLocW, 1, &camera.getEye()[0]));
 		CHECK_GL_ERROR(glUniform4fv(ambLocW, 1, &wAmbient[0]));
 		CHECK_GL_ERROR(glUniform1f(ambCLocW, ambConstant));
+		CHECK_GL_ERROR(glUniform4fv(sceneColLocW, 1, &tSceneCol[0]));
+		CHECK_GL_ERROR(glUniform1f(fogDistLocW, tFogDist));
 		CHECK_GL_ERROR(glUniform4fv(specLocW, 1, &wSpecular[0]));
 		CHECK_GL_ERROR(glUniform1f(shinyLocW, wShininess));
 		CHECK_GL_ERROR(glUniform1i(timeLocW, wTime));

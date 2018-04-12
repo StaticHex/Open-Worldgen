@@ -105,6 +105,8 @@ const float ambConstant = 0.10f;
 // Terrain Shader constants
 const vec4 tAmbient = vec4(1.0f, 1.0f, 0.875f, 1.0f);
 const vec4 tSpecular = vec4(0.01f, 0.01f, 0.01f, 1.0f);
+const vec4 tSceneCol = vec4(0.0f, 0.8f, 1.0f, 0.0f);
+const float tFogDist = 110.0;
 const float tShininess = 0.01f;
 
 // Water Shader constants

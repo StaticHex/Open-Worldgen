@@ -1,4 +1,5 @@
 #include "Occulus.h"
+#include "locks.h"
 using glm::clamp;
 using std::make_tuple;
 
@@ -59,8 +60,8 @@ Occulus::Occulus(vec3 pos) :
 // - Uses open simplex to generate noise values for temperature
 //   and height, multiplies these values, and sets them as the height
 //   and temperature for the sector at the passed index.
-tuple<float, float> Occulus::mapNoise(int index) {
-	vec3 tVec = position + map[index].position;
+tuple<float, float> Occulus::mapNoise(vec3 pos) {
+	vec3 tVec = position + pos;
 	float nx = tVec.x / (O_DIM * 1.0) - 0.5;
 	float nz = tVec.z / (O_DIM * 1.0) - 0.5;
 	float tVal = open_simplex_noise2(ctx, nx, nz);
@@ -72,8 +73,6 @@ tuple<float, float> Occulus::mapNoise(int index) {
 	hVal -= 0.25 * open_simplex_noise2(ctx, nx * 5.0, nz * 5.0);
 	hVal *= 20.001;
 	tVal = clamp(tVal * 100.0 - hVal*2.0, 0.0, 100.0);
-	hVal = static_cast<int>(hVal*100.0) / 100.0;
-	tVal = static_cast<int>(tVal*100.0) / 100.0;
 	return make_tuple(hVal, tVal);
 }
 
@@ -88,7 +87,7 @@ void Occulus::initMap() {
 			Sector newSec = Sector();
 			newSec.init(j*spacing, 0.0f, i*spacing);
 			this->map.push_back(newSec);
-			tuple<float, float> ht = mapNoise(map.size() - 1);
+			tuple<float, float> ht = mapNoise(newSec.position);
 			map.back().position.y = get<0>(ht);
 			map.back().temp = get<1>(ht);
 		}
@@ -100,19 +99,42 @@ void Occulus::initMap() {
 // - Updates noise-based parameters for each sector when the update function 
 //   is called.
 void Occulus::updateMap() {
-	vec3 dV = lPosition - position;
-	lPosition = position;
-	if (dV.x != 0.0 || dV.z != 0.0) {
-		if (map.size()) {
-			for (int i = 0; i < O_DIM; i++) {
-				for (int j = 0; j < O_DIM; j++) {
-					int idx = i*O_DIM + j;
-					tuple<float, float> ht = mapNoise(idx);
-					map[idx].position.y = get<0>(ht);
-					map[idx].temp = get<1>(ht);
-				}
+	// calculate motion based on flags
+	int flags = calcFlags();
+
+	// if we aren't moving, we don't need to do anything, so only run if we're moving
+	if (flags) {
+		// spin up threads to do noise calculations while we're copying our map
+		copyFinished.lock();
+
+		std::thread rowThread(&Occulus::runGenRow, this);
+		std::thread colThread(&Occulus::runGenCol, this);
+		int until[] = { O_DIM, 0, O_DIM - 1 }; // array holding the terminating conditions for our loops
+		int start[] = { 0, O_DIM - 1, 0 }; // array holding the starting values for our loops
+		int inc[] = { 1, -1, 1 }; // array holding the increment values for our loops
+		int mov[] = { 0, -1, 1 }; // array holding the shift direction for our loops
+		int zDir = flags & 3; // extract flags for z-direction
+		int xDir = (flags >> 2) & 3; // extract flags for x-direction
+
+									 // create a vector of lambda functions to help with end conditions in the for loops
+		auto ops = [](int i, int x, int flag)->bool { if (flag % 2 == 0) { return i < x; } else { return i > x; }return false; };
+
+		for (int i = start[zDir]; ops(i, until[zDir],zDir); i += inc[zDir]) {
+			for (int j = start[xDir]; ops(j, until[xDir],xDir); j += inc[xDir]) {
+				map[i * O_DIM + j].copy(map[(i + mov[zDir]) * O_DIM + (j + mov[xDir])]);
 			}
 		}
+
+		// mark copy operations finished
+		copyFinished.unlock();
+
+		rowThreadFinished.lock();
+		colThreadFinished.lock();
+		rowThreadFinished.unlock();
+		colThreadFinished.unlock();
+		rowThread.join();
+		colThread.join();
+		lPosition = position;
 	}
 }
 
@@ -559,4 +581,152 @@ vec4 Occulus::calcNormal(vec3 p1, vec3 p2, vec3 p3) {
 	vec3 U = normalize(p2 - p1);
 	vec3 V = normalize(p3 - p1);
 	return vec4(cross(U, V), 1.0f);
+}
+
+// Calculate Flags Method()
+// @description
+// - Generates a bit vector based on the detected direction of movement.
+//   the bit places for this vector are as follows:
+//   8     4    2         1
+//   Right Left Backwards Forward
+int Occulus::calcFlags() {
+	int f = 0; // our flag variable (a bit vector)
+	vec3 dV = position - lPosition; // calculate difference in position
+
+	// Set flag based on motion in z direction
+	if (dV.z < 0) {
+		f += 1;
+	} else if (dV.z > 0) {
+		f += 2;
+	}
+
+	// Set flag based on motion in x direction
+	if (dV.x < 0) {
+		f += 4;
+	} else if (dV.x > 0) {
+		f += 8;
+	}
+
+	// return bit vector representing motion
+	return f;
+}
+
+// Run Generate Row Method
+// @description
+// - Thread function used to generate a new row using the map noise function.
+void Occulus::runGenRow() {
+	rowThreadFinished.lock();
+
+	int flags = calcFlags(); // get our bit vector representing movement
+	int zDir = flags & 3; // pull out the flags for the z-direction
+
+	// Only run calculations if we're moving in this direction
+	if (zDir) {
+		bool running = true; // create a variable to keep our thread running until calculations are finished
+		bool started = false; // create a variable to ensure calcRow is only run once
+		int replace[] = { -1, 0, O_DIM - 1 }; // array to hold which row to replace
+		vector<tuple<float, float>> row; // create a vector to hold the noise values for our new row
+		// one final check to make sure nothing went wrong
+		if (replace[zDir] >= 0) {
+			while (running) {
+				if (!started) {
+					started = true;
+					genRow(zDir, row);
+					running = false;
+				}
+			}
+
+			copyFinished.lock();
+			// Copy our values into our map
+			for (int i = 0; i < O_DIM; i++) {
+				int idx = replace[zDir] * O_DIM + i;
+				map[idx].position.y = get<0>(row[i]);
+				map[idx].temp = get<1>(row[i]);
+			}
+
+			copyFinished.unlock();
+		}
+	}
+
+	rowThreadFinished.unlock();
+}
+
+// Run Generate Column Method
+// @description
+// - Thread function used to generate a new column using the map noise function.
+void Occulus::runGenCol() {
+	colThreadFinished.lock();
+	int flags = calcFlags(); // get our bit vector representing movement
+	int xDir = (flags >> 2) & 3; // pull out the flags for the z-direction
+
+						  // Only run calculations if we're moving in this direction
+	if (xDir) {
+		bool running = true; // create a variable to keep our thread running until calculations are finished
+		bool started = false; // create a variable to ensure calcRow is only run once
+		int replace[] = { -1, 0, O_DIM - 1 }; // array to hold which column to replace
+		vector<tuple<float, float>> col; // create a vector to hold the noise values for our new column
+		// one final check to make sure nothing went wrong
+		if (replace[xDir] >= 0) {
+			while (running) {
+				if (!started) {
+					started = true;
+					genCol(xDir, col);
+					running = false;
+				}
+			}
+
+			copyFinished.lock();
+			// Copy our values into our map
+			for (int i = 0; i < O_DIM; i++) {
+				int idx = i * O_DIM + replace[xDir];
+				map[idx].position.y = get<0>(col[i]);
+				map[idx].temp = get<1>(col[i]);
+			}
+			copyFinished.unlock();
+		}
+	}
+
+	// mark column generation finished
+	colThreadFinished.unlock();
+}
+
+// Generate Row Function
+// @param
+// - flags : a bit vector denoting which direction on the z axis we're moving
+// - row : a reference to a location to store our generated noise values
+// @description
+// - generates a new row of values using the mapNoise method and then stores
+//   them in the passed vector
+void Occulus::genRow(int flags, vector<tuple<float, float>> &row) {
+	int r[] = { -1, 0, O_DIM - 1 }; // values to determine which row to generate noise for
+	// Check to make sure we're actually generating noise
+	if (r[flags] >= 0) {
+		// generate a new column of noise
+		for (int i = 0; i < O_DIM; i++) {
+			int idx = r[flags] * O_DIM + i;
+			tuple<float, float> ht = mapNoise(map[idx].position);
+			row.push_back(ht);
+		}
+	}
+}
+
+// Generate Column Function
+// @param
+// - flags : a bit vector denoting which direction on the z axis we're moving
+// - col : a reference to a location to store our generated noise values
+// @description
+// - generates a new column of values using the mapNoise method and then stores
+//   them in the passed vector
+void Occulus::genCol(int flags, vector<tuple<float, float>> &col) {
+	int c[] = { -1, 0, O_DIM - 1 }; // values to determine which row to generate noise for
+
+	// Check to make sure we're actually generating noise
+	if (c[flags] >= 0) {
+		// generate a new column of noise
+		for (int i = 0; i < O_DIM; i++) {
+			int idx = i * O_DIM + c[flags];
+			tuple<float, float> ht = mapNoise(map[idx].position);
+			col.push_back(ht);
+		}
+	}
 }
