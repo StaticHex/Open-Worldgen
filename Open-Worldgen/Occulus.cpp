@@ -7,8 +7,7 @@ using std::make_tuple;
 // @description:
 // - Used to create a new view area centered at X:0.0, Y:0.0, Z:0.0
 Occulus::Occulus() :
-	spacing(Sector().size * 2.0),
-	seaLevel(-0.1)
+	spacing(Sector().size * 2.0)
 {
 	position = vec3(0.0f, 0.0f, 0.0f);
 	lPosition = position;
@@ -27,8 +26,7 @@ Occulus::Occulus() :
 //   view area centered at hte specified location
 Occulus::Occulus(float x, float y, float z) :
 	position(vec3(x, y, z)),
-	spacing(Sector().size * 2.0),
-	seaLevel(-0.1)
+	spacing(Sector().size * 2.0)
 {
 	size = spacing * O_DIM * C_DIM;
 	lPosition = position;
@@ -44,8 +42,7 @@ Occulus::Occulus(float x, float y, float z) :
 //  view area
 Occulus::Occulus(vec3 pos) :
 	position(pos),
-	spacing(Sector().size * 2.0),
-	seaLevel(-0.1)
+	spacing(Sector().size * 2.0)
 {
 	size = spacing * O_DIM;
 	lPosition = position;
@@ -66,13 +63,13 @@ tuple<float, float> Occulus::mapNoise(vec3 pos) {
 	float nz = tVec.z / (O_DIM * 1.0) - 0.5;
 	float tVal = open_simplex_noise2(ctx, nx, nz);
 
-	float hVal = 1.0 * open_simplex_noise2(ctx, nx * 10.0, nz * 10.0);
-	hVal += 0.5 * open_simplex_noise2(ctx, nx * 20.0, nz * 20.0);
-	hVal += 0.25 * open_simplex_noise2(ctx, nx * 50.0, nz * 30.0);
-	hVal = glm::max(powf(hVal, 2.33334), 0.0f);
-	hVal -= 0.25 * open_simplex_noise2(ctx, nx * 5.0, nz * 5.0);
-	hVal *= 20.001;
-	tVal = clamp(tVal * 100.0 - hVal*2.0, 0.0, 100.0);
+	float hVal = height1a * open_simplex_noise2(ctx, nx * height1b, nz * height1c);
+		  hVal += height2a * open_simplex_noise2(ctx, nx * height2b, nz * height2c);
+		  hVal += height3a * open_simplex_noise2(ctx, nx * height3b, nz * height3c);
+		  hVal = glm::max(powf(hVal, heightPow), 0.0f);
+		  hVal -= slHeighta * open_simplex_noise2(ctx, nx * slHeightb, nz * slHeightc);
+		  hVal *= maxH;
+		  tVal = clamp(tVal * 100.0 - hVal*2.0, 0.0, 100.0);
 	return make_tuple(hVal, tVal);
 }
 
@@ -109,7 +106,7 @@ void Occulus::updateMap() {
 
 		std::thread rowThread(&Occulus::runGenRow, this);
 		std::thread colThread(&Occulus::runGenCol, this);
-		int until[] = { O_DIM, 0, O_DIM - 1 }; // array holding the terminating conditions for our loops
+		int until[] = { O_DIM, 0, O_DIM }; // array holding the terminating conditions for our loops
 		int start[] = { 0, O_DIM - 1, 0 }; // array holding the starting values for our loops
 		int inc[] = { 1, -1, 1 }; // array holding the increment values for our loops
 		int mov[] = { 0, -1, 1 }; // array holding the shift direction for our loops
@@ -138,6 +135,23 @@ void Occulus::updateMap() {
 	}
 }
 
+// Refresh Method
+// @description 
+// - Refreshes the entire map, mainly used for handling updates to noise function parameters via the GUI. For
+//   updating the map every frame the update function should be called.
+void Occulus::refresh() {
+	if (map.size()) {
+		for (int i = 0; i < O_DIM; i++) {
+			for (int j = 0; j < O_DIM; j++) {
+				int idx = i*O_DIM + j;
+				tuple<float, float> ht = mapNoise(map[idx].position);
+				map[idx].position.y = get<0>(ht);
+				map[idx].temp = get<1>(ht);
+			}
+		}
+	}
+}
+
 // Update Method
 // @param
 // - pos: the new position of the occulus
@@ -148,8 +162,11 @@ void Occulus::updateMap() {
 // - Updates the position of the view area, calls the updateMap() method ot update the height map
 //   and temperature map, and then calls the draw and smooth shading functions.
 void Occulus::update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<float> &temps, vector<uvec3> &faces) {
-	position.x = pos.x;
-	position.z = pos.z;
+	vec3 snappedPos = pos;
+	snappedPos.x = roundf(snappedPos.x / spacing) * spacing;
+	snappedPos.z = roundf(snappedPos.z / spacing) * spacing;
+	position.x = snappedPos.x;
+	position.z = snappedPos.z;
 	updateMap();
 	draw(normals, temps, heights, faces);
 }
@@ -386,10 +403,10 @@ void Occulus::drawWater(vector<vec4> &vertices, vector<vec2> &uvs, vector<uvec3>
 			vec3 p3 = map[ind3].position;
 			vec3 p4 = map[ind4].position;
 
-			p1.y = seaLevel;
-			p2.y = seaLevel;
-			p3.y = seaLevel;
-			p4.y = seaLevel;
+			p1.y = 0.0;
+			p2.y = 0.0;
+			p3.y = 0.0;
+			p4.y = 0.0;
 
 			// calculate the UV values for each point
 			float xfac = j*1.0;
@@ -622,19 +639,11 @@ void Occulus::runGenRow() {
 
 	// Only run calculations if we're moving in this direction
 	if (zDir) {
-		bool running = true; // create a variable to keep our thread running until calculations are finished
-		bool started = false; // create a variable to ensure calcRow is only run once
 		int replace[] = { -1, 0, O_DIM - 1 }; // array to hold which row to replace
 		vector<tuple<float, float>> row; // create a vector to hold the noise values for our new row
 		// one final check to make sure nothing went wrong
 		if (replace[zDir] >= 0) {
-			while (running) {
-				if (!started) {
-					started = true;
-					genRow(zDir, row);
-					running = false;
-				}
-			}
+			genRow(zDir, row);
 
 			copyFinished.lock();
 			// Copy our values into our map
@@ -661,19 +670,11 @@ void Occulus::runGenCol() {
 
 						  // Only run calculations if we're moving in this direction
 	if (xDir) {
-		bool running = true; // create a variable to keep our thread running until calculations are finished
-		bool started = false; // create a variable to ensure calcRow is only run once
 		int replace[] = { -1, 0, O_DIM - 1 }; // array to hold which column to replace
 		vector<tuple<float, float>> col; // create a vector to hold the noise values for our new column
 		// one final check to make sure nothing went wrong
 		if (replace[xDir] >= 0) {
-			while (running) {
-				if (!started) {
-					started = true;
-					genCol(xDir, col);
-					running = false;
-				}
-			}
+			genCol(xDir, col);
 
 			copyFinished.lock();
 			// Copy our values into our map

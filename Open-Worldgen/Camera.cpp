@@ -53,12 +53,18 @@ vec3 Camera::getRight() { return right; }
 vec3 Camera::getCenter() { return center; }
 void Camera::setLook(vec3 nLook) { look = nLook; }
 void Camera::setEye(vec3 nEye) {
+	//float factor = Sector().size * 2;
+	//nEye.x = roundf(nEye.x / factor) * factor;
+	//nEye.z = roundf(nEye.z / factor) * factor;
 	cameraDistance = distance(nEye, center);
 	eye = nEye;
 }
 void Camera::setUp(vec3 nUp) { up = nUp; }
 void Camera::setRight(vec3 nRight) { right = nRight; }
 void Camera::setCenter(vec3 nCenter) {
+	//float factor = Sector().size * 2;
+	//nCenter.x = roundf(nCenter.x / factor) * factor;
+	//nCenter.z = roundf(nCenter.z / factor) * factor;
 	cameraDistance = distance(nCenter, eye);
 	center = nCenter;
 }

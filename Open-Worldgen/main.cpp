@@ -77,6 +77,7 @@ uniform sampler2D grassTex;
 uniform sampler2D iceTex;
 uniform sampler2D rockTex;
 uniform sampler2D sandTex;
+uniform float seaLev;
 out vec4 fCol;
 
 void main()
@@ -85,6 +86,7 @@ void main()
 	vec3 L = normalize(lDir.xyz);
 	vec3 C = normalize(cDir.xyz);
 	vec4 tex = texture2D(dirtTex, UV);
+	vec4 dirtTex = texture2D(dirtTex, UV);
 	vec4 sandTex = texture2D(sandTex, UV);
 	vec4 rockTex = texture2D(rockTex, UV);
 	vec4 grassTex = texture2D(grassTex, UV);
@@ -94,15 +96,16 @@ void main()
 
 	// height and temp modifiers
 	float hMod = clamp(log(-fHeight+5.0)+0.5, 0.0, 1.0);
-	float snHMod = clamp(sin(fTemp/5.0 - 6.2), 0.0, 1.0);
+	float snHMod = clamp(cos((fHeight + 0.5)/(1.0*3.14159))/1.5 + 0.5,0.0,1.0);
 	float saMod = clamp((fTemp  - 75.0)/5.0+0.5,0.0,1.0);
 	float rMod = clamp(-(fTemp  - 45.0)/5.0+1.0,0.0,1.0);
-	float iMod = clamp(-(fTemp - 30.0)/10.0+0.25,0.0,1.0);
-	float snMod = clamp(-(fTemp - 25.0)/15.0+1.0,0.0,1.0);
+	float dMod = clamp(-(fTemp  - 70.0)/5.0+1.0,0.0,1.0);
+	float iMod = clamp(-(fTemp - 32.0)/10.0+0.25,0.0,1.0);
+	float snMod = clamp(-(fTemp - 16.0)/15.0+1.0,0.0,1.0);
 	float gMod = clamp(sin(fTemp/13-3.05),0.0,1.0);
-
-	// add in sand
-	tex = (1.0-saMod)*tex + saMod*sandTex;
+	float grMod = clamp(-(fTemp - 35.0)/10.0+0.25,0.0,1.0);
+	float slMod = clamp(log(-fHeight + 1.0 + seaLev) + 1.0, 0.0, 1.0);
+	float wfMod = clamp(log(-fHeight + 0.5 + seaLev)/2.5, 0.0, 1.0);
 
 	// add in rock
 	tex = (1.0 - hMod)*((1.0 - rMod)*tex + rMod*rockTex) + hMod*rockTex;
@@ -116,6 +119,22 @@ void main()
 	// Add in grass
 	tex = hMod*((1.0-gMod)*tex + gMod*grassTex) + (1.0-hMod)*tex;
 
+
+	// add in sand
+	tex = (1.0 - slMod) * ((1.0-saMod)*tex + saMod*sandTex) + slMod * ((1.0 - saMod) * tex + saMod*sandTex);
+
+	// add in mud
+	tex = (1.0 - slMod) * tex + slMod * ((1.0 - dMod) * tex + dMod * dirtTex);
+
+	// add in gravel
+	tex = (1.0 - slMod) * tex + slMod * ((1.0 - grMod) * tex + grMod * gravelTex);
+
+	// add in blue for areas under water
+	float aquaC = 1.0 - wfMod;
+	vec4 wBlue = wfMod * vec4(0.0, aquaC*0.67, aquaC, 1.0);
+		 wBlue += (clamp(wfMod-0.5,0.0,1.0)) * vec4(0.0, 0.0, aquaC*0.5, 1.0);
+	tex = (1.0 - wfMod) * tex + wBlue;
+	
 	// calculate ambient component
 	 vec3 amb = ambConst * ambient.xyz + diffuse.xyz * (ambConst / 2.0);
 
@@ -148,6 +167,7 @@ uniform mat4 projection;
 uniform vec4 lPos;
 uniform vec4 cPos;
 uniform int time;
+uniform float seaLev;
 out vec4 lDir;
 out vec4 cDir;
 out vec4 cDist;
@@ -176,36 +196,39 @@ float calcY(float xPos, float zPos, float t) {
 	float wave = oSFac*cos(lgSFac*sin(smSFac*cos(sin(xPos + t) + zPos - t) + xPos + t) + smSFac*cos(lgSFac*sin(cos(zPos + t) + xPos - t) + zPos + t));
 		  wave += oSFac*cos(lgSFac*sin(smSFac*cos(sin(xPos - t) + zPos + t) + xPos + t) + smSFac*cos(lgSFac*sin(cos(zPos - t) + xPos + t) + zPos + t));
 		  wave += oSFac*cos(lgSFac*sin(smSFac*cos(sin(xPos - t) + zPos + t) + xPos - t) + smSFac*cos(lgSFac*sin(cos(zPos - t) + xPos + t) + zPos - t));
-	return wave;
+	return wave+seaLev;
 }
 
 void main()
 {
+	// vpos is read only so whe have to create an augmented position first
+	vec4 augPos = vPos;
+		augPos.y += seaLev;
 	float spacing = 0.25 * 2.0;
 	float t = calcP(time, 60.0);
 
 	// create some virtual vertices
-	vec4 v_p1 = vec4(vPos.x, calcY(vPos.x, vPos.z + spacing, t), vPos.z + spacing, 1.0);
-	vec4 v_p2 = vec4(vPos.x + spacing, calcY(vPos.x + spacing, vPos.z + spacing, t), vPos.z + spacing, 1.0);
-	vec4 v_p3 = vec4(vPos.x + spacing, calcY(vPos.x + spacing, vPos.z, t), vPos.z, 1.0);
-	vec4 v_p4 = vec4(vPos.x, calcY(vPos.x, vPos.z - spacing, t), vPos.z - spacing, 1.0);
-	vec4 v_p5 = vec4(vPos.x - spacing, calcY(vPos.x - spacing, vPos.z - spacing, t), vPos.z - spacing, 1.0);
-	vec4 v_p6 = vec4(vPos.x - spacing, calcY(vPos.x - spacing, vPos.z, t), vPos.z, 1.0);
+	vec4 v_p1 = vec4(augPos.x, calcY(augPos.x, augPos.z + spacing, t), augPos.z + spacing, 1.0);
+	vec4 v_p2 = vec4(augPos.x + spacing, calcY(augPos.x + spacing, augPos.z + spacing, t), augPos.z + spacing, 1.0);
+	vec4 v_p3 = vec4(augPos.x + spacing, calcY(augPos.x + spacing, augPos.z, t), augPos.z, 1.0);
+	vec4 v_p4 = vec4(augPos.x, calcY(augPos.x, augPos.z - spacing, t), augPos.z - spacing, 1.0);
+	vec4 v_p5 = vec4(augPos.x - spacing, calcY(augPos.x - spacing, augPos.z - spacing, t), augPos.z - spacing, 1.0);
+	vec4 v_p6 = vec4(augPos.x - spacing, calcY(augPos.x - spacing, augPos.z, t), augPos.z, 1.0);
 
 	// create some virtual face normals 
-	vec4 v_n1 = calcNorm(v_p6, vPos, v_p1);
-	vec4 v_n2 = calcNorm(v_p1, v_p2, vPos);
-	vec4 v_n3 = calcNorm(vPos, v_p3, v_p2);
-	vec4 v_n4 = calcNorm(vPos, v_p3, v_p4);
-	vec4 v_n5 = calcNorm(v_p5, v_p4, vPos);
-	vec4 v_n6 = calcNorm(v_p6, vPos, v_p5);
+	vec4 v_n1 = calcNorm(v_p6, augPos, v_p1);
+	vec4 v_n2 = calcNorm(v_p1, v_p2, augPos);
+	vec4 v_n3 = calcNorm(augPos, v_p3, v_p2);
+	vec4 v_n4 = calcNorm(augPos, v_p3, v_p4);
+	vec4 v_n5 = calcNorm(v_p5, v_p4, augPos);
+	vec4 v_n6 = calcNorm(v_p6, augPos, v_p5);
 
 	// average virtual normals together for smooth shading effect
 	vec3 v_sn = normalize(v_n1.xyz + v_n2.xyz + v_n3.xyz + v_n4.xyz + v_n5.xyz + v_n6.xyz);
 
     // Transform vertex into clipping coordinates
-	wPos = vec4(cPos.x + vPos.x, vPos.y, cPos.z + vPos.z, 1.0);
-	wPos.y = calcY(wPos.x, wPos.z, t);
+	wPos = vec4(cPos.x + augPos.x, augPos.y, cPos.z + augPos.z, 1.0);
+	//wPos.y = calcY(wPos.x, wPos.z, t);
 	gl_Position = projection * view * wPos;
 	cDir = vec4(normalize(cPos.xyz - wPos.xyz), 1.0);
 	cDist = vec4(cPos.xyz - wPos.xyz, 1.0);
@@ -664,6 +687,10 @@ void run_opengl() {
 	GLint sandTexLoc = 0;
 	CHECK_GL_ERROR(sandTexLoc =
 		glGetUniformLocation(tProgram, "sandTex"));
+	GLint seaLevLoc = 0;
+	CHECK_GL_ERROR(seaLevLoc =
+		glGetUniformLocation(tProgram, "seaLev"));
+
 
 	/*
 	================================================================================
@@ -771,6 +798,9 @@ void run_opengl() {
 	GLint texLocW = 0;
 	CHECK_GL_ERROR(texLocW =
 		glGetUniformLocation(wProgram, "texMap"));
+	GLint seaLevelW = 0;
+	CHECK_GL_ERROR(seaLevelW =
+		glGetUniformLocation(wProgram, "seaLev"));
 
 	/*
 	================================================================================
@@ -833,7 +863,13 @@ void run_opengl() {
 		// Switch to the Geometry VAO.
 		CHECK_GL_ERROR(glBindVertexArray(gArrayObjects[kGeometryVao]));
 
-		single.update(camera.getEye(), tHeights, tNormals, tTemps, tFaces);
+		if (!setRefresh) {
+			single.update(camera.getEye(), tHeights, tNormals, tTemps, tFaces);
+		}
+		else {
+			single.refresh();
+			setRefresh = false;
+		}
 
 		// Compute the projection matrix.
 		aspect = static_cast<float>(winWidth) / winHeight;
@@ -890,6 +926,7 @@ void run_opengl() {
 		CHECK_GL_ERROR(glUniform1i(iceTexLoc, 5));
 		CHECK_GL_ERROR(glUniform1i(rockTexLoc, 6));
 		CHECK_GL_ERROR(glUniform1i(sandTexLoc, 7));
+		CHECK_GL_ERROR(glUniform1f(seaLevLoc, seaLevel));
 
 
 		// Draw our triangles.
@@ -917,6 +954,7 @@ void run_opengl() {
 		CHECK_GL_ERROR(glUniform1f(shinyLocW, wShininess));
 		CHECK_GL_ERROR(glUniform1i(timeLocW, wTime));
 		CHECK_GL_ERROR(glUniform1i(texLocW, 3));
+		CHECK_GL_ERROR(glUniform1f(seaLevelW, seaLevel));
 
 		CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, wFaces.size() * 3, GL_UNSIGNED_INT, 0));
 		// END OF WATER SHADER STUFF
@@ -951,18 +989,249 @@ int main(int argc, char* argv[])
 	std::thread gl_thread(run_opengl);
 	std::thread fps_thread(fps_calc);
 	//gl_thread.join();
+
+	/**********************************************************************
+	 * Set up main window
+	 **********************************************************************/
+	// Header for FPS box (label which says FPS)
 	lbl_fps->box(FL_NO_BOX);
 	lbl_fps->labelsize(20);
 	lbl_fps->labelfont(FL_HELVETICA + FL_BOLD);
 	lbl_fps->labeltype(FL_SHADOW_LABEL);
 
+	// Box which contains FPS rate
 	box->box(FL_UP_BOX);
 	box->labelsize(20);
 	box->labelfont(FL_HELVETICA);
+	
+	// Button which brings up sea level settings panel
+	btnSeaLvl->image(imgSeaLvl);
+	btnSeaLvl->align(FL_ALIGN_IMAGE_BACKDROP);
+	btnSeaLvl->callback(showPanelCallback, seaLevelPanel);
 
-	main_window->set_modal();
-	main_window->end();
-	main_window->show(argc, argv);
+	// button which brings up noise generation settings panel
+	btnNoiseP->image(imgNoiseP);
+	btnNoiseP->align(FL_ALIGN_IMAGE_BACKDROP);
+	btnNoiseP->callback(showPanelCallback, adjustNoise);
+
+	// Set up main window
+	mainWindow->set_modal();
+	mainWindow->add(lbl_fps);
+	mainWindow->add(box);
+	mainWindow->add(btnSeaLvl);
+	mainWindow->add(btnNoiseP);
+	mainWindow->remove(seaLevelPanel);
+	mainWindow->remove(adjustNoise);
+	mainWindow->end();
+	mainWindow->show(argc, argv);
+
+	/**********************************************************************
+	* Set up sea level panel
+	**********************************************************************/
+
+	// Title text
+	lblSeaLevel->box(FL_FLAT_BOX);
+	lblSeaLevel->color(fl_rgb_color(220, 220, 220));
+	lblSeaLevel->labelsize(20);
+	lblSeaLevel->labelfont(FL_HELVETICA + FL_BOLD);
+	lblSeaLevel->labeltype(FL_SHADOW_LABEL);
+
+	// back button (needed since window is modal)
+	btnSeaBack->box(FL_NO_BOX);
+	btnSeaBack->labelsize(14);
+	btnSeaBack->callback(hidePanelCallback, seaLevelPanel);
+	btnSeaBack->labelcolor(fl_rgb_color(0, 170, 255));
+
+	// slider for adjusting sea level settings
+	seaSlider->box(FL_UP_BOX);
+	seaSlider->range(-maxH/4.0, maxH*1.5);
+	seaSlider->step(0.01);
+	seaSlider->value(seaLevel);
+	seaSlider->type(FL_HOR_NICE_SLIDER);
+	seaSlider->textsize(12);
+	seaSlider->callback(sliderCallback, seaSlider);
+	seaSlider->show();
+
+	// the sea level settings panel itself
+	seaLevelPanel->set_modal();
+	seaLevelPanel->add(lblSeaLevel);
+	seaLevelPanel->add(seaSlider);
+	seaLevelPanel->add(btnSeaBack);
+	seaLevelPanel->remove(adjustNoise);
+	seaLevelPanel->remove(mainWindow);
+	seaLevelPanel->end();
+	seaLevelPanel->show();
+	seaLevelPanel->hide();
+
+	/**********************************************************************
+	* Set up noise settings panel
+	**********************************************************************/
+
+	// Title text
+	lblNoiseGen->box(FL_FLAT_BOX);
+	lblNoiseGen->color(fl_rgb_color(220, 220, 220));
+	lblNoiseGen->labelsize(20);
+	lblNoiseGen->labelfont(FL_HELVETICA + FL_BOLD);
+	lblNoiseGen->labeltype(FL_SHADOW_LABEL);
+
+	// back button (needed since window is modal)
+	btnNoiseBack->box(FL_NO_BOX);
+	btnNoiseBack->labelsize(14);
+	btnNoiseBack->callback(hidePanelCallback, adjustNoise);
+	btnNoiseBack->labelcolor(fl_rgb_color(0, 170, 255));
+
+	// sliders for adjusting elevation settings
+	noiseElevation1a->box(FL_UP_BOX);
+	noiseElevation1a->range(0.0, 5.0);
+	noiseElevation1a->step(0.01);
+	noiseElevation1a->value(height1a);
+	noiseElevation1a->type(FL_HOR_NICE_SLIDER);
+	noiseElevation1a->textsize(12);
+	noiseElevation1a->labelsize(14);
+	noiseElevation1a->callback(sliderEH1ACallback, noiseElevation1a);
+	noiseElevation1a->labelfont(FL_HELVETICA + FL_BOLD);
+	noiseElevation1a->align(FL_ALIGN_TOP_LEFT);
+
+	noiseElevation1b->box(FL_UP_BOX);
+	noiseElevation1b->range(0.0, 50.0);
+	noiseElevation1b->step(0.5);
+	noiseElevation1b->value(height1b);
+	noiseElevation1b->callback(sliderEH1BCallback, noiseElevation1b);
+	noiseElevation1b->type(FL_HOR_NICE_SLIDER);
+	noiseElevation1b->textsize(12);
+
+	noiseElevation1c->box(FL_UP_BOX);
+	noiseElevation1c->range(0.0, 50.0);
+	noiseElevation1c->step(0.5);
+	noiseElevation1c->value(height1c);
+	noiseElevation1c->callback(sliderEH1CCallback, noiseElevation1c);
+	noiseElevation1c->type(FL_HOR_NICE_SLIDER);
+	noiseElevation1c->textsize(12);
+
+	noiseElevation2a->box(FL_UP_BOX);
+	noiseElevation2a->range(0.0, 5.0);
+	noiseElevation2a->step(0.01);
+	noiseElevation2a->value(height2a);
+	noiseElevation2a->callback(sliderEH2ACallback, noiseElevation2a);
+	noiseElevation2a->type(FL_HOR_NICE_SLIDER);
+	noiseElevation2a->textsize(12);
+
+	noiseElevation2b->box(FL_UP_BOX);
+	noiseElevation2b->range(0.0, 50.0);
+	noiseElevation2b->step(0.5);
+	noiseElevation2b->value(height2b);
+	noiseElevation2b->callback(sliderEH2BCallback, noiseElevation2b);
+	noiseElevation2b->type(FL_HOR_NICE_SLIDER);
+	noiseElevation2b->textsize(12);
+
+	noiseElevation2c->box(FL_UP_BOX);
+	noiseElevation2c->range(0.0, 50.0);
+	noiseElevation2c->step(0.5);
+	noiseElevation2c->value(height2c);
+	noiseElevation2c->callback(sliderEH2CCallback, noiseElevation2c);
+	noiseElevation2c->type(FL_HOR_NICE_SLIDER);
+	noiseElevation2c->textsize(12);
+
+	noiseElevation3a->box(FL_UP_BOX);
+	noiseElevation3a->range(0.0, 5.0);
+	noiseElevation3a->step(0.01);
+	noiseElevation3a->value(height3a);
+	noiseElevation3a->callback(sliderEH3ACallback, noiseElevation3a);
+	noiseElevation3a->type(FL_HOR_NICE_SLIDER);
+	noiseElevation3a->textsize(12);
+
+	noiseElevation3b->box(FL_UP_BOX);
+	noiseElevation3b->range(0.0, 50.0);
+	noiseElevation3b->step(0.5);
+	noiseElevation3b->value(height3b);
+	noiseElevation3b->callback(sliderEH3BCallback, noiseElevation3b);
+	noiseElevation3b->type(FL_HOR_NICE_SLIDER);
+	noiseElevation3b->textsize(12);
+
+	noiseElevation3c->box(FL_UP_BOX);
+	noiseElevation3c->range(0.0, 50.0);
+	noiseElevation3c->step(0.5);
+	noiseElevation3c->value(height3c);
+	noiseElevation3c->callback(sliderEH3CCallback, noiseElevation3c);
+	noiseElevation3c->type(FL_HOR_NICE_SLIDER);
+	noiseElevation3c->textsize(12);
+
+	// Slider for noise power constant
+	sldEPower->box(FL_UP_BOX);
+	sldEPower->range(0.0, 5.0);
+	sldEPower->step(0.01);
+	sldEPower->value(heightPow);
+	sldEPower->type(FL_HOR_NICE_SLIDER);
+	sldEPower->textsize(12);
+	sldEPower->labelsize(14);
+	sldEPower->labelfont(FL_HELVETICA + FL_BOLD);
+	sldEPower->callback(sldEPowerCCallback, sldEPower);
+	sldEPower->align(FL_ALIGN_TOP_LEFT);
+
+	// Sliders for sea bed adjustments
+	sldSeaNoiseA->box(FL_UP_BOX);
+	sldSeaNoiseA->range(0.0, 5.0);
+	sldSeaNoiseA->step(0.01);
+	sldSeaNoiseA->value(slHeighta);
+	sldSeaNoiseA->type(FL_HOR_NICE_SLIDER);
+	sldSeaNoiseA->textsize(12);
+	sldSeaNoiseA->labelsize(14);
+	sldSeaNoiseA->callback(sldSeaNoiseACallback, sldSeaNoiseA);
+	sldSeaNoiseA->labelfont(FL_HELVETICA + FL_BOLD);
+	sldSeaNoiseA->align(FL_ALIGN_TOP_LEFT);
+
+	sldSeaNoiseB->box(FL_UP_BOX);
+	sldSeaNoiseB->range(0.0, 50.0);
+	sldSeaNoiseB->step(0.5);
+	sldSeaNoiseB->value(slHeightb);
+	sldSeaNoiseB->callback(sldSeaNoiseBCallback, sldSeaNoiseB);
+	sldSeaNoiseB->type(FL_HOR_NICE_SLIDER);
+	sldSeaNoiseB->textsize(12);
+
+	sldSeaNoiseC->box(FL_UP_BOX);
+	sldSeaNoiseC->range(0.0, 50.0);
+	sldSeaNoiseC->step(0.5);
+	sldSeaNoiseC->value(slHeightc);
+	sldSeaNoiseC->callback(sldSeaNoiseCCallback, sldSeaNoiseC);
+	sldSeaNoiseC->type(FL_HOR_NICE_SLIDER);
+	sldSeaNoiseC->textsize(12);
+
+	// Slider for height multiplier
+	sldHMult->box(FL_UP_BOX);
+	sldHMult->range(0.0, 50.0);
+	sldHMult->step(0.5);
+	sldHMult->value(heightPow);
+	sldHMult->type(FL_HOR_NICE_SLIDER);
+	sldHMult->textsize(12);
+	sldHMult->labelsize(14);
+	sldHMult->callback(sldHMultCallback, sldHMult);
+	sldHMult->labelfont(FL_HELVETICA + FL_BOLD);
+	sldHMult->align(FL_ALIGN_TOP_LEFT);
+
+	// the noise settings panel itself
+	adjustNoise->set_modal();
+	adjustNoise->remove(seaLevel);
+	adjustNoise->remove(mainWindow);
+	adjustNoise->add(lblNoiseGen);
+	adjustNoise->add(noiseElevation1a);
+	adjustNoise->add(noiseElevation1b);
+	adjustNoise->add(noiseElevation1c);
+	adjustNoise->add(noiseElevation2a);
+	adjustNoise->add(noiseElevation2b);
+	adjustNoise->add(noiseElevation2c);
+	adjustNoise->add(noiseElevation3a);
+	adjustNoise->add(noiseElevation3b);
+	adjustNoise->add(noiseElevation3c);
+	adjustNoise->add(sldEPower);
+	adjustNoise->add(sldSeaNoiseA);
+	adjustNoise->add(sldSeaNoiseB);
+	adjustNoise->add(sldSeaNoiseC);
+	adjustNoise->add(sldHMult);
+	adjustNoise->add(btnNoiseBack);
+	adjustNoise->end();
+	adjustNoise->show();
+	adjustNoise->hide();
+
 	return Fl::run();
-	return 0;
+	
 }

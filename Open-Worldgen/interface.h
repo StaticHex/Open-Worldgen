@@ -1,4 +1,5 @@
 #pragma once
+#include "settings.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -10,6 +11,7 @@
 #include <glm/gtx/string_cast.hpp>
 #include <math.h>
 #include <thread>
+#include <stdlib.h> /* atoi */
 
 // OpenGL library includes
 #include <Windows.h>
@@ -23,9 +25,14 @@
 #include "debuggl.h"
 
 // GUI Libraries
+#include <iostream>
 #include <FL/Fl.H>
 #include <FL/Fl_Window.H>
 #include <FL/Fl_Box.H>
+#include <FL/Fl_Button.H>
+#include <fl/Fl_Widget.H>
+#include <FL/Fl_PNG_Image.H>
+#include <FL/Fl_Value_Slider.H>
 
 using glm::vec4;
 using glm::vec3;
@@ -36,6 +43,31 @@ using glm::radians;
 using std::cout;
 using std::endl;
 using std::numeric_limits;
+
+// Init settings
+double seaLevel = 1.0;
+
+// Elevation settings
+double height1a = 1.0;
+double height1b = 10.0;
+double height1c = 10.0;
+double height2a = 0.5;
+double height2b = 20.0;
+double height2c = 20.0;
+double height3a = 0.25;
+double height3b = 50.0;
+double height3c = 30.0;
+
+// Raise elevation by power
+double heightPow = 2.33334;
+
+// sea level settings
+double slHeighta = 0.25;
+double slHeightb = 5.0;
+double slHeightc = 5.0;
+
+// multiplier
+double maxH = 20.001;
 
 // Define statements
 #define PRESS_W key == GLFW_KEY_W && action != GLFW_RELEASE
@@ -65,12 +97,78 @@ int currentButton;
 bool mousePressed;
 float aspect = 0.0f;
 
+// Grid variable
+bool setRefresh = false;
+
 // UI Variables
 int fps = 0;
 bool running = true; // used for threading UI updates
-Fl_Window *main_window = new Fl_Window(120, 400);
-Fl_Box *box = new Fl_Box(20, 40, 80, 40, "###");
-Fl_Box *lbl_fps = new Fl_Box(20, 0, 80, 40, "FPS");
+Fl_Window *mainWindow = new Fl_Window(120, 400, "Settings"); // Main window for settings toolbar
+Fl_Box *box = new Fl_Box(10, 40, 100, 40, "###"); // Box which holds the FPS counter
+
+double slWidth = 400.0;
+double slHeight = 80.0;
+// Window which holds the settings for adjusting the sea level for the map
+Fl_Window *seaLevelPanel = new Fl_Window(Fl::w() / 2.0 - slWidth / 2.0, Fl::h() / 2.0 - slHeight / 2.0, slWidth, slHeight, "Sea Level");
+Fl_Box *lblSeaLevel = new Fl_Box(0, 0, seaLevelPanel->w(), 30, "Change Sea Level"); // Header for sea level window
+Fl_Button *btnSeaBack = new Fl_Button(10, lblSeaLevel->h() / 2.0 - (20/2.0), 70, 20, "<< Back");
+Fl_Value_Slider *seaSlider = new Fl_Value_Slider(10, lblSeaLevel->h() + 10, seaLevelPanel->w() - 20, seaLevelPanel->h() - lblSeaLevel->h() - 20, "");
+
+// Window which holds the settings for adjusting the noise constants for the map
+double anWidth = 400.0;
+double anHeight = 290.0;
+Fl_Window *adjustNoise = new Fl_Window(Fl::w() / 2.0 - anWidth / 4.0, Fl::h() / 2.0 - anHeight / 4.0, anWidth, anHeight, "Adjust Noise");
+Fl_Box *lblNoiseGen = new Fl_Box(0, 0, adjustNoise->w(), 30, "Change Noise Settings");
+Fl_Button *btnNoiseBack = new Fl_Button(10, lblNoiseGen->h() / 2.0 - (20 / 2.0), 70, 20, "<< Back");
+
+// Elevation sliders
+const double nSliderW = (adjustNoise->w() - 40) / 3.0; // calculate width of elevation sliders dynamically
+const double nSliderMW = adjustNoise->w() - (nSliderW) * 2.0 - 40;
+const double nSliderX1 = 10;
+
+const double nSliderH1 = lblNoiseGen->y() + lblNoiseGen->h() + 30;
+Fl_Value_Slider *noiseElevation1a = new Fl_Value_Slider(nSliderX1, nSliderH1, nSliderW, 20, "Elevation Settings");
+
+const double nSliderX2 = noiseElevation1a->x() + noiseElevation1a->w() + 10;
+Fl_Value_Slider *noiseElevation1b = new Fl_Value_Slider(nSliderX2,nSliderH1,  nSliderMW, 20);
+
+const double nSliderX3 = noiseElevation1b->x() + noiseElevation1b->w() + 10;
+Fl_Value_Slider *noiseElevation1c = new Fl_Value_Slider(nSliderX3, nSliderH1, nSliderW, 20);
+
+const double nSliderH2 = noiseElevation1a->y() + noiseElevation1a->h() + 5;
+Fl_Value_Slider *noiseElevation2a = new Fl_Value_Slider(nSliderX1, nSliderH2, nSliderW, 20);
+Fl_Value_Slider *noiseElevation2b = new Fl_Value_Slider(nSliderX2, nSliderH2, nSliderMW, 20);
+Fl_Value_Slider *noiseElevation2c = new Fl_Value_Slider(nSliderX3, nSliderH2, nSliderW, 20);
+
+const double nSliderH3 = noiseElevation2a->y() + noiseElevation2a->h() + 5;
+Fl_Value_Slider *noiseElevation3a = new Fl_Value_Slider(nSliderX1, nSliderH3, nSliderW, 20);
+Fl_Value_Slider *noiseElevation3b = new Fl_Value_Slider(nSliderX2, nSliderH3, nSliderMW, 20);
+Fl_Value_Slider *noiseElevation3c = new Fl_Value_Slider(nSliderX3, nSliderH3, nSliderW, 20);
+
+// Elevation power constant slider
+const double npSliderH = noiseElevation3a->y() + noiseElevation3a->h() + 30;
+Fl_Value_Slider *sldEPower = new Fl_Value_Slider(nSliderX1, npSliderH, adjustNoise->w() - 20 , 20, "Elevation Power Constant");
+
+// sea level sliders
+const double nsSliderH = sldEPower->y() + sldEPower->h() + 30;
+Fl_Value_Slider *sldSeaNoiseA = new Fl_Value_Slider(nSliderX1, nsSliderH, nSliderW, 20, "Sea Bed Settings");
+Fl_Value_Slider *sldSeaNoiseB = new Fl_Value_Slider(nSliderX2, nsSliderH, nSliderMW, 20);
+Fl_Value_Slider *sldSeaNoiseC = new Fl_Value_Slider(nSliderX3, nsSliderH, nSliderW, 20);
+
+// Height multiplier slider
+const double hmSliderH = sldSeaNoiseA->y() + sldSeaNoiseA->h() + 30;
+Fl_Value_Slider *sldHMult = new Fl_Value_Slider(nSliderX1, hmSliderH, adjustNoise->w() - 20, 20, "Height Multiplier");
+
+Fl_Box *lbl_fps = new Fl_Box(10, 0, 80, 40, "FPS"); // Label for the FPS counter
+
+// images for the settings window buttons
+Fl_PNG_Image *imgSeaLvl = new Fl_PNG_Image("./assets/sealevel.png");
+Fl_PNG_Image *imgSeaLvlInactive = new Fl_PNG_Image("./assets/sealevel-inactive.png");
+Fl_PNG_Image *imgNoiseP = new Fl_PNG_Image("./assets/aterrain.png");
+Fl_PNG_Image *imgNoisePInactive = new Fl_PNG_Image("./assets/aterrain.-inactive.png");
+
+Fl_Button *btnSeaLvl = new Fl_Button(10, 90, 45, 30, ""); // button which brings up the sea level window
+Fl_Button *btnNoiseP = new Fl_Button(65, 90, 45, 30, ""); // button which brings up the noise settings window
 
 // Mouse position vectors
 vec2 cPos = vec2(0, 0);
@@ -210,3 +308,109 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 	mousePressed = (action == GLFW_PRESS);
 	currentButton = button;
 }
+
+void showPanelCallback(Fl_Widget* widget, void* target) {
+	Fl_Window *current = (Fl_Window*)target;
+
+	if (current->visible()) {
+		current->hide();
+	}
+	else {
+		current->show();
+	}
+}
+
+void hidePanelCallback(Fl_Widget* widget, void* target) {
+	Fl_Window *current = (Fl_Window*)target;
+	current->hide();
+}
+
+void sliderCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	seaLevel = sld->value();
+}
+
+void sliderEH1ACallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height1a = sld->value();
+	setRefresh = true;
+}
+
+void sliderEH1BCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height1b = sld->value();
+	setRefresh = true;
+}
+
+void sliderEH1CCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height1c = sld->value();
+	setRefresh = true;
+}
+
+void sliderEH2ACallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height2a = sld->value();
+	setRefresh = true;
+}
+
+void sliderEH2BCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height2b = sld->value();
+	setRefresh = true;
+}
+
+void sliderEH2CCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height2c = sld->value();
+	setRefresh = true;
+}
+
+void sliderEH3ACallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height3a = sld->value();
+	setRefresh = true;
+}
+
+void sliderEH3BCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height3b = sld->value();
+	setRefresh = true;
+}
+
+void sliderEH3CCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	height3c = sld->value();
+	setRefresh = true;
+}
+
+void sldEPowerCCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	heightPow = sld->value();
+	setRefresh = true;
+}
+
+void sldSeaNoiseACallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	slHeighta = sld->value();
+	setRefresh = true;
+}
+
+void sldSeaNoiseBCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	slHeightb = sld->value();
+	setRefresh = true;
+}
+
+void sldSeaNoiseCCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	slHeightc = sld->value();
+	setRefresh = true;
+}
+
+void sldHMultCallback(Fl_Widget* widget, void* target) {
+	Fl_Value_Slider* sld = (Fl_Value_Slider*)target;
+	maxH = sld->value();
+	setRefresh = true;
+}
+

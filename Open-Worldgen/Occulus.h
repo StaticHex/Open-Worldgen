@@ -10,6 +10,7 @@
 #define UVY_MAX 0.50
 
 #include "OpenSimplex.h"
+#include "settings.h"
 #include "Sector.h"
 #include <map>
 #include <vector>
@@ -33,7 +34,6 @@ class Occulus {
 public:
 	vec3 position;
 	float size;
-	float seaLevel;
 	vector<Sector> map;
 	Occulus();
 	Occulus(float x, float y, float z);
@@ -42,6 +42,7 @@ public:
 		vector<float> &temps, vector<float> &heights, vector<uvec3> &faces);
 	void drawWater(vector<vec4> &vertices, vector<vec2> &uvs, vector<uvec3>&faces);
 	void update(vec3 pos, vector<float> &heights, vector<vec4> &normals, vector<float> &temps, vector<uvec3> &faces);
+	void refresh();
 private:
 	float spacing;
 	void initMap();
